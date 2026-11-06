@@ -1,0 +1,30 @@
+{
+  "name": "technical-assessment",
+  "version": "1.0.0",
+  "private": true,
+  "description": "QA Automation Technical Assessment - Playwright tests for a trading platform",
+  "scripts": {
+    "test": "playwright test",
+    "test:smoke": "playwright test --project=smoke",
+    "test:trading": "playwright test --project=trading",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
+    "dotenv": "^18.0.9",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-playwright": "^2.12.2",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1"
+  }
+}
