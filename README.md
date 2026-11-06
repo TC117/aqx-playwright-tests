@@ -23,7 +23,7 @@ written with Playwright (TypeScript) and Python.
 
 ```
 src/
-  config/env.ts        Typed settings loaded from .env
+  config/env.ts        Typed settings loaded from .env.local / .env
   fixtures/test.ts     Playwright `test` extended with page objects
   pages/               Page objects (BasePage, LoginPage, ...)
 tests/
@@ -40,7 +40,7 @@ Requires Node.js 20+.
 ```bash
 npm ci
 npx playwright install chromium
-cp .env.example .env   # then fill in BASE_URL and the demo account credentials
+cp .env.example .env.local   # then fill in BASE_URL and the demo account credentials
 ```
 
 ## Running tests
@@ -55,7 +55,9 @@ cp .env.example .env   # then fill in BASE_URL and the demo account credentials
 | `npm run typecheck`    | TypeScript type check                  |
 | `npm run lint`         | ESLint                                 |
 
-Tests that need the web trader skip themselves with a clear reason when `.env` is not filled in.
+Settings are read from real environment variables first, then `.env.local`, then `.env`
+(both files are git-ignored). Tests that need the web trader skip themselves with a clear
+reason when the credentials are missing.
 
 ## Design notes
 
@@ -67,6 +69,7 @@ Tests that need the web trader skip themselves with a clear reason when `.env` i
 
 ## Status
 
-Framework base is in place. Locators in `LoginPage` are generic and will be tightened once
-the demo web trader UI has been explored. Assumptions and environment limitations will be
+Framework base is in place. `LoginPage` uses the app's own `data-testid` attributes
+(`login-user-id`, `login-password`, `login-submit`, `tab-login-account-type-demo`), checked
+against the live login page (the site root redirects to `/web/login`). Assumptions and environment limitations will be
 documented here as the trading scenarios are implemented.
