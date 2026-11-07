@@ -1,0 +1,62 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      trading:
+        description: Also run the trading project (places real orders on the demo account)
+        type: boolean
+        default: false
+
+# All runs share one demo account, so they must never overlap.
+concurrency:
+  group: aqx-demo-account
+  cancel-in-progress: false
+
+jobs:
+  static:
+    name: Type check, lint, format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+
+  e2e:
+    name: Playwright
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE_URL: https://aqxtrader.aquariux.com
+      # Repository secrets. Without them (e.g. pull requests from forks) logged-in tests skip.
+      TRADER_USERNAME: ${{ secrets.TRADER_USERNAME }}
+      TRADER_PASSWORD: ${{ secrets.TRADER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run tests
+        # Trading tests place real (demo) orders, so they only run when asked for by hand.
+        run: >-
+          npx playwright test --project=smoke --project=terminal --project=mocked
+          ${{ inputs.trading && '--project=trading' || '' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
