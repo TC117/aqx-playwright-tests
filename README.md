@@ -22,6 +22,8 @@ written with Playwright (TypeScript) and Python.
 ## Project structure
 
 ```
+docs/
+  testcase-final.md    Final test cases, traceability, automation strategy, assumptions
 src/
   config/env.ts        Typed settings loaded from .env.local / .env
   fixtures/test.ts     Playwright `test` extended with page objects
