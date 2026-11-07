@@ -3,6 +3,7 @@ import { AUTH_FILE, env } from './src/config/env';
 
 // The web trader is a desktop-first terminal; a wide viewport keeps all panels visible.
 const desktop = { ...devices['Desktop Chrome'], viewport: { width: 1600, height: 900 } };
+const loggedIn = { ...desktop, storageState: AUTH_FILE };
 
 export default defineConfig({
   testDir: './tests',
@@ -11,8 +12,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: env.isCI,
-  retries: env.isCI ? 1 : 0,
-  timeout: 60_000,
+  // A retry could place a second order, so trading tests are never retried.
+  retries: 0,
+  timeout: 90_000,
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
@@ -30,15 +32,33 @@ export default defineConfig({
       use: desktop,
     },
     {
+      // Login page checks; no session needed.
       name: 'smoke',
       testDir: './tests/smoke',
       use: desktop,
     },
     {
+      // Logged-in checks that do not need the market to be open (validation, settings,
+      // closed-market behaviour, records already on the account).
+      name: 'terminal',
+      testDir: './tests/terminal',
+      dependencies: ['setup'],
+      use: loggedIn,
+    },
+    {
+      // Real orders on the demo account. Each test skips with a reason while its market is closed.
       name: 'trading',
       testDir: './tests/trading',
       dependencies: ['setup'],
-      use: { ...desktop, storageState: AUTH_FILE },
+      use: loggedIn,
+    },
+    {
+      // UI checks with the server's responses replaced (page.route). Only what the server reports
+      // to the UI is mocked, never what it decides.
+      name: 'mocked',
+      testDir: './tests/mocked',
+      dependencies: ['setup'],
+      use: { ...loggedIn, serviceWorkers: 'block' },
     },
   ],
 });
