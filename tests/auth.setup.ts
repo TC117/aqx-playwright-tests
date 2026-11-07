@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { request } from '@playwright/test';
 import { test as setup, expect } from '../src/fixtures/test';
 import {
@@ -31,7 +32,19 @@ async function savedSessionStillWorks(): Promise<boolean> {
   }
 }
 
+/**
+ * Logged-in projects open their browser with `AUTH_FILE`. Without credentials there is no session
+ * to save, so an empty state lets those tests start and skip with a clear reason instead of
+ * failing on a missing file.
+ */
+function ensureStorageStateFile(): void {
+  if (fs.existsSync(AUTH_FILE)) return;
+  fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
+  fs.writeFileSync(AUTH_FILE, JSON.stringify({ cookies: [], origins: [] }));
+}
+
 setup('log in to the demo account and save the session', async ({ loginPage, page }) => {
+  ensureStorageStateFile();
   setup.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
 
   setup.skip(

@@ -1,6 +1,6 @@
 import { test as base, expect } from '@playwright/test';
 import { AqxApi } from '../api/AqxApi';
-import { env } from '../config/env';
+import { env, hasCredentials, MISSING_CREDENTIALS_REASON } from '../config/env';
 import { OrderTracker } from '../helpers/OrderTracker';
 import { LoginPage } from '../pages/LoginPage';
 import { TradePage } from '../pages/TradePage';
@@ -27,13 +27,15 @@ export const test = base.extend<Fixtures>({
 
   // Playwright requires the destructuring pattern even when no other fixture is used.
   // eslint-disable-next-line no-empty-pattern
-  api: async ({}, use) => {
+  api: async ({}, use, testInfo) => {
+    testInfo.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
     const api = await AqxApi.create();
     await use(api);
     await api.dispose();
   },
 
-  tradePage: async ({ page, symbol }, use) => {
+  tradePage: async ({ page, symbol }, use, testInfo) => {
+    testInfo.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
     const tradePage = new TradePage(page);
     await tradePage.open();
     await tradePage.selectSymbol(symbol);
