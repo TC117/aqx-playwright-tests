@@ -1,0 +1,190 @@
+import { request, type APIRequestContext } from '@playwright/test';
+import fs from 'node:fs';
+import { API_TOKEN_FILE, env } from '../config/env';
+
+/**
+ * Read-only client for the web trader's own REST API (the same calls the UI makes).
+ *
+ * Tests use it to read state the UI shows in several places (market status, symbol spec, account
+ * balance, order counts, history), to check that the UI and the server agree, and to decide
+ * whether a market-dependent test can run. It never places, modifies or closes orders: those go
+ * through the UI, because that is what the tests are about.
+ *
+ * Shapes below were recorded from the live demo; only the fields the tests use are typed.
+ */
+
+interface Envelope<T> {
+  code: string;
+  result: T;
+  message?: string;
+}
+
+export interface SymbolSummary {
+  symbol: string;
+  type: string;
+  decimal: number;
+  bid: number;
+  ask: number;
+  /** e.g. `TRADING`, `CLOSED`. */
+  status: string;
+  /** e.g. `TRADING`, `CLOSED`, `OFFQUOTES` (no quotes even inside the session). */
+  marketStatus: string;
+  online: boolean;
+}
+
+export interface TradingSession {
+  /** 1 = Monday … 7 = Sunday. */
+  dayOfWeek: number;
+  openTime: string;
+  closeTime: string;
+}
+
+export interface SymbolDetail {
+  symbol: string;
+  type: string;
+  digits: number;
+  /** Minimum distance, in points, between the market price and SL/TP/pending prices. */
+  stopsLevel: number;
+  contractSize: number;
+  minContractLotSize: number;
+  maxContractLotSize: number;
+  lotSizeStep: number;
+  /** Size of one point, e.g. 0.0001 for EURUSD. */
+  pointStep: number;
+  tradingSessions: TradingSession[];
+}
+
+export interface TradingAccount {
+  accountId: string;
+  accountType: string;
+  isDemo: boolean;
+  balance: number;
+  equity: number;
+  margin: number;
+  freeMargin: number;
+  leverage: number;
+  baseCurrency: string;
+}
+
+export interface OrderCounts {
+  marketOrderCounts: number;
+  pendingOrderCounts: number;
+}
+
+/** An entry of `/api/order/v3/histories` (Positions History). Balance operations have orderType 6. */
+export interface HistoryEntry {
+  orderId: string;
+  positionId: string;
+  dealId: string;
+  symbol: string;
+  volume: number;
+  openPrice: number;
+  closePrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  profit: number;
+  deposit: number;
+  withdrawal: number;
+  commission: number;
+  swap: number;
+  orderType: number;
+  status: string;
+  openTime: number;
+  closeTime: number;
+}
+
+/** Market states that mean "no trading possible right now". */
+const CLOSED_STATES = new Set(['CLOSED', 'OFFQUOTES']);
+
+export class AqxApi {
+  private constructor(private readonly http: APIRequestContext) {}
+
+  /** Creates a client from the bearer token saved by `tests/auth.setup.ts`. */
+  static async create(): Promise<AqxApi> {
+    if (!fs.existsSync(API_TOKEN_FILE)) {
+      throw new Error(`No API token at ${API_TOKEN_FILE}; run the setup project first`);
+    }
+    const { authorization } = JSON.parse(fs.readFileSync(API_TOKEN_FILE, 'utf8')) as {
+      authorization: string;
+    };
+    const http = await request.newContext({
+      baseURL: env.baseUrl,
+      extraHTTPHeaders: { authorization, accept: 'application/json' },
+    });
+    return new AqxApi(http);
+  }
+
+  async dispose(): Promise<void> {
+    await this.http.dispose();
+  }
+
+  private async get<T>(path: string): Promise<T> {
+    const response = await this.http.get(path);
+    if (!response.ok()) {
+      throw new Error(`GET ${path} responded ${response.status()}`);
+    }
+    const body = (await response.json()) as Envelope<T>;
+    if (body.code !== '200')
+      throw new Error(`GET ${path} returned code ${body.code}: ${body.message ?? ''}`);
+    return body.result;
+  }
+
+  symbols(): Promise<SymbolSummary[]> {
+    return this.get('/api/market/v1/symbols/all');
+  }
+
+  async symbol(symbol: string): Promise<SymbolSummary> {
+    const found = (await this.symbols()).find((s) => s.symbol === symbol);
+    if (!found) throw new Error(`Symbol ${symbol} is not offered on this account`);
+    return found;
+  }
+
+  symbolDetail(symbol: string): Promise<SymbolDetail> {
+    return this.get(`/api/market/v1/symbol/detail?symbol=${encodeURIComponent(symbol)}`);
+  }
+
+  /** True when the symbol is quoting and can be traded right now. */
+  async isMarketOpen(symbol: string): Promise<boolean> {
+    const s = await this.symbol(symbol);
+    return !CLOSED_STATES.has(s.status) && !CLOSED_STATES.has(s.marketStatus);
+  }
+
+  async account(): Promise<TradingAccount> {
+    const result = await this.get<{ tradingAccounts: (TradingAccount & { selected?: boolean })[] }>(
+      '/api/user/account/v1',
+    );
+    const account = result.tradingAccounts.find((a) => a.selected) ?? result.tradingAccounts[0];
+    if (!account) throw new Error('The user has no trading account');
+    return account;
+  }
+
+  orderCounts(): Promise<OrderCounts> {
+    return this.get('/api/trade/order/v1/counts');
+  }
+
+  /** Raw open positions. The item shape is not typed yet: the account had none when recorded. */
+  openPositions(): Promise<Record<string, unknown>[]> {
+    return this.get('/api/trade/order/v1');
+  }
+
+  /** Raw pending orders (shape not typed yet, see {@link openPositions}). */
+  pendingOrders(): Promise<Record<string, unknown>[]> {
+    return this.get('/api/trade/order/v1/pending');
+  }
+
+  /** Positions History between two moments (defaults: the last 30 days). */
+  positionHistory(
+    from = Date.now() - 30 * 86_400_000,
+    to = Date.now() + 86_400_000,
+  ): Promise<HistoryEntry[]> {
+    return this.get(`/api/order/v3/histories?from=${from}&to=${to}&type=POSITION`);
+  }
+
+  /** One-Click Trading preference as stored on the server for this account. */
+  async isOneClickTradingEnabled(): Promise<boolean> {
+    const result = await this.get<{ value?: string }[]>(
+      '/api/user/setting/v1/preference?type=OCT_ENABLE&category=ONE_CLICK_TRADING',
+    );
+    return result.some((p) => String(p.value).toLowerCase() === 'true');
+  }
+}
