@@ -30,3 +30,6 @@ export const MISSING_CREDENTIALS_REASON =
 
 /** Where the logged-in browser state is saved by the setup project and reused by trading tests. */
 export const AUTH_FILE = path.join(ROOT, '.auth/user.json');
+
+/** Bearer header the web trader sends to its API, saved by the setup project for `AqxApi`. */
+export const API_TOKEN_FILE = path.join(ROOT, '.auth/api-token.json');
