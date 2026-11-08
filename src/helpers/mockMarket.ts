@@ -1,5 +1,6 @@
 import type { Page, Route } from '@playwright/test';
 import { test as base } from '../fixtures/test';
+import { TRADE_WRITES } from '../pages/components/tradeRequests';
 
 /**
  * Mocks for the `mocked` project: make a closed market look open, and answer order requests in
@@ -10,9 +11,8 @@ import { test as base } from '../fixtures/test';
  *   `tradableExeMode` is true). It reads the status from `/api/market/v1/symbol/detail` and
  *   `/api/market/v1/symbols/all`; replacing it there is enough: BUY / SELL and "Place Buy Order"
  *   become enabled and show the last real quote. The price stream (STOMP over SockJS) is not needed.
- * - Every trade write goes to `/api/trade/trade/...`: POST `v1/market` places a market order,
- *   POST `v1/limit` a pending one, PATCH modifies them, PUT `v1` closes a position, DELETE `v1`
- *   deletes a pending order, PUT `v1/bulk` and `v1/limit/bulk` are the bulk actions.
+ * - Every trade write goes to `/api/trade/trade/...` (`TRADE_WRITES`; the endpoints are listed
+ *   with `TRADE_API` in src/pages/components/tradeRequests.ts).
  * - The app judges a reply by its HTTP status only (a 200 reply is a success whatever its body).
  *   Errors are shown as a toast: HTTP 4xx with a known `code` shows that code's text (e.g.
  *   `MT4_1004` → "Insufficient balance"), HTTP 500 shows "Something went wrong. Please contact
@@ -33,6 +33,27 @@ export interface MarketOrderRequest {
   takeProfit?: number;
 }
 
+/** What the app sends to place a pending order. */
+export interface PendingOrderRequest {
+  /** Buy / Sell: Limit 2 / 3, Stop 4 / 5, Stop Limit 8 / 9. */
+  orderType: number;
+  symbol: string;
+  lotSize: number;
+  /** Order price; the stop price of a Stop Limit order. */
+  price: number;
+  /** Limit price of a Stop Limit order, `null` for the other types. */
+  priceTrigger: number | null;
+  /** 2 = Return. */
+  fillPolicy: number;
+  indicate: string;
+  stopLoss?: number;
+  takeProfit?: number;
+  /** `GTC`, `GTD`, `SPECIFIED_TIMESTAMP` or `SPECIFIED_DAY`. */
+  tradeExpiry: string;
+  /** Epoch milliseconds, only for the two "Specified" expiries. */
+  expiration?: number;
+}
+
 export const ORDER_TYPE = { BUY: 0, SELL: 1 } as const;
 
 /** A trade write the page tried to send. It was answered by the mock, never by the server. */
@@ -40,7 +61,11 @@ export interface CapturedOrder {
   method: string;
   /** e.g. `/api/trade/trade/v1/market`. */
   path: string;
-  body: MarketOrderRequest;
+  /**
+   * Typed for the order placements the mocked specs capture; other writes (modify, close, delete)
+   * carry the bodies listed with `TRADE_API`.
+   */
+  body: MarketOrderRequest | PendingOrderRequest;
 }
 
 /** How the mock answers order requests. */
@@ -50,7 +75,6 @@ export type OrderReply =
   | { kind: 'network-failure' }
   | { kind: 'no-response' };
 
-const TRADE_WRITES = '/api/trade/trade/';
 const OPEN_STATUS = { status: 'TRADING', marketStatus: 'TRADING', online: true };
 
 interface Envelope<T> {
@@ -128,7 +152,7 @@ export async function captureOrderRequests(
     requests.push({
       method: request.method(),
       path: new URL(request.url()).pathname,
-      body: request.postDataJSON() as MarketOrderRequest,
+      body: request.postDataJSON() as CapturedOrder['body'],
     });
     await answer(route, reply);
   });
@@ -138,7 +162,7 @@ export async function captureOrderRequests(
 async function answer(route: Route, reply: OrderReply): Promise<void> {
   switch (reply.kind) {
     case 'success':
-      // The app ignores the body of a successful reply.
+      // The app ignores the body of a successful reply; the page objects also want code "200".
       return route.fulfill({ json: { code: '200', result: null } });
     case 'error':
       return route.fulfill({

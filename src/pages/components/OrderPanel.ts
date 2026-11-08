@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, type Response } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { parseUiNumber, requireUiNumber } from '../../helpers/numbers';
 import type {
   Expiry,
@@ -9,6 +9,10 @@ import type {
   Side,
 } from '../../models/trading';
 import { TradeConfirmation, type ConfirmationDetails } from './TradeConfirmation';
+import { submitTradeRequest, TRADE_API } from './tradeRequests';
+
+// Moved to tradeRequests.ts; still exported here for the specs that import it from this file.
+export { OrderRejectedError } from './tradeRequests';
 
 /** Numbers of the "Trade Details (USD)" block, in account currency; `null` while empty. */
 export interface TradeDetails {
@@ -45,32 +49,31 @@ export interface ServerClock {
   minute: number;
 }
 
-/**
- * The server turned an order down. `code` is the platform's code (e.g. MT5 `10016`), else the HTTP
- * status, or `NO_RESPONSE` when the request failed without an answer.
- */
-export class OrderRejectedError extends Error {
-  constructor(
-    readonly code: string,
-    readonly serverMessage: string,
-    readonly httpStatus: number,
-  ) {
-    super(`Order rejected (HTTP ${httpStatus}, code ${code}): ${serverMessage}`);
-    this.name = 'OrderRejectedError';
-  }
-}
-
-/** Where the place button sends orders (read from the web trader's bundle). */
-const ORDER_API = {
-  market: '/api/trade/trade/v1/market',
-  pending: '/api/trade/trade/v1/limit',
-} as const;
-
 /** Inline validation texts seen under the inputs, e.g. "Stop Loss must be less than Sell Price." */
 const VALIDATION_TEXT = /must be|^Please enter|^(Minimum|Maximum) .+ is /;
 
+/** Top bar clock, "Server Time : 2026-11-08 02:01:17". */
+const SERVER_TIME = /^Server Time\s*:/;
+
 /** The server clock's UTC offset is a whole number of quarter hours. */
 const QUARTER_HOUR = 15 * 60_000;
+
+/** Server clock minus UTC, read from the top bar clock (rounded to a quarter hour). */
+export async function serverClockOffsetMs(page: Page): Promise<number> {
+  const text = await page.getByText(SERVER_TIME).innerText();
+  const m = text.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+  if (!m) throw new Error(`Cannot read the server time from "${text}"`);
+  const [year, month, day, hour, minute, second] = m.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const serverAsUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  return Math.round((serverAsUtc - Date.now()) / QUARTER_HOUR) * QUARTER_HOUR;
+}
 
 /** Server wall clock of `instant`, given the server's offset from UTC. */
 export function serverClock(instant: Date, offsetMs: number): ServerClock {
@@ -169,11 +172,51 @@ export async function pickClockTime(
 }
 
 /**
+ * Opens one of the custom dropdowns (order panel or Edit Order dialog) and clicks `option`, unless
+ * it is already selected.
+ */
+export async function chooseOption(dropdown: Locator, option: string): Promise<void> {
+  if ((await dropdown.innerText()).trim() === option) return;
+  await dropdown.click();
+  // The open list follows the trigger, which also shows the current value.
+  await dropdown.getByText(option, { exact: true }).last().click();
+  await expect(dropdown).toHaveText(option);
+}
+
+/** The expiry inputs of a pending-order form (order panel or Edit Order dialog). */
+export interface ExpiryInputs {
+  dropdown: Locator;
+  date: Locator;
+  time: Locator;
+}
+
+/**
+ * Picks an expiry. For "Specified Date" and "Specified Date and Time", `expiresAt` is entered as
+ * the server clock shows it (the pickers work in server time); without it the form keeps its
+ * default, which is the current server time.
+ */
+export async function pickExpiry(
+  page: Page,
+  inputs: ExpiryInputs,
+  expiry: Expiry,
+  expiresAt?: Date,
+): Promise<void> {
+  await chooseOption(inputs.dropdown, expiry);
+  if (!expiresAt) return;
+  if (expiry !== 'Specified Date' && expiry !== 'Specified Date and Time') {
+    throw new Error(`Expiry "${expiry}" does not take a date`);
+  }
+  const clock = serverClock(expiresAt, await serverClockOffsetMs(page));
+  await pickCalendarDate(page, inputs.date, clock);
+  if (expiry === 'Specified Date and Time') await pickClockTime(page, inputs.time, clock);
+}
+
+/**
  * Order panel ("Trade" tab) on the right of the trade screen.
  *
  * Verified on the live demo with the market closed: every locator below exists. The place button
- * reads "Market Closed" and is disabled while the symbol's market is closed; when the market is
- * open the web trader labels it "Place Buy Order" / "Place Sell Order" (from its bundle).
+ * reads "Market Closed" and is disabled while the symbol's market is closed; with the market
+ * reported open (mocked) it reads "Place Buy Order" / "Place Sell Order".
  * Order Type and Expiry are custom dropdowns whose options exist only while open. Inputs take
  * `fill()` and normalise on blur: prices are rounded to the symbol's digits, volume is cut to the
  * volume step and capped at the maximum. Changing the order type clears SL/TP; changing the side
@@ -226,7 +269,6 @@ export class OrderPanel {
   lastConfirmation: ConfirmationDetails | null = null;
 
   private readonly root: Locator;
-  private readonly toast: Locator;
 
   constructor(protected readonly page: Page) {
     this.tradeTab = page.getByTestId('tab-trade');
@@ -263,8 +305,7 @@ export class OrderPanel {
     this.tradeDetailsHeader = root.getByTestId('trade-details').getByText(/^Trade Details/);
     this.validation = root.getByText(VALIDATION_TEXT);
     this.confirmation = new TradeConfirmation(page);
-    this.serverTime = page.getByText(/^Server Time\s*:/);
-    this.toast = page.getByTestId('notification-box-description');
+    this.serverTime = page.getByText(SERVER_TIME);
   }
 
   /** Shows the "Trade" form (One-Click Trading opens the panel on its own tab). */
@@ -289,24 +330,13 @@ export class OrderPanel {
   }
 
   async selectOrderType(type: OrderType): Promise<void> {
-    await this.choose(this.orderType, type);
+    await chooseOption(this.orderType, type);
   }
 
-  /**
-   * Picks an expiry. For "Specified Date" and "Specified Date and Time", `expiresAt` is entered as
-   * the server clock shows it (the pickers work in server time); without it the form keeps its
-   * default, which is the current server time.
-   */
+  /** Picks an expiry; see {@link pickExpiry}. */
   async selectExpiry(expiry: Expiry, expiresAt?: Date): Promise<void> {
-    await this.choose(this.expiry, expiry);
-    if (!expiresAt) return;
-    if (expiry !== 'Specified Date' && expiry !== 'Specified Date and Time') {
-      throw new Error(`Expiry "${expiry}" does not take a date`);
-    }
-    const clock = serverClock(expiresAt, await this.serverTimeOffsetMs());
-    await pickCalendarDate(this.page, this.expiryDate, clock);
-    if (expiry === 'Specified Date and Time')
-      await pickClockTime(this.page, this.expiryTime, clock);
+    const inputs = { dropdown: this.expiry, date: this.expiryDate, time: this.expiryTime };
+    await pickExpiry(this.page, inputs, expiry, expiresAt);
   }
 
   /** True when the place button says the market is closed. */
@@ -324,8 +354,20 @@ export class OrderPanel {
     // While open, the dropdown holds its trigger followed by one entry per option.
     const entries = dropdown.locator('[tabindex="0"]');
     await dropdown.click();
-    await expect(entries).not.toHaveCount(1);
-    const texts = await entries.allInnerTexts();
+    // The list renders in steps; read it until two reads in a row agree.
+    let texts: string[] = [];
+    let previousLength = -1;
+    await expect
+      .poll(
+        async () => {
+          texts = await entries.allInnerTexts();
+          const settled = texts.length > 1 && texts.length === previousLength;
+          previousLength = texts.length;
+          return settled;
+        },
+        { message: 'the dropdown should finish listing its options' },
+      )
+      .toBe(true);
     await entries.first().click();
     await expect(entries).toHaveCount(1);
     return texts.slice(1).map((t) => t.trim());
@@ -440,19 +482,7 @@ export class OrderPanel {
 
   /** Server clock minus UTC, from the top bar clock (rounded to a quarter hour). */
   async serverTimeOffsetMs(): Promise<number> {
-    const text = await this.serverTime.innerText();
-    const m = text.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
-    if (!m) throw new Error(`Cannot read the server time from "${text}"`);
-    const [year, month, day, hour, minute, second] = m.slice(1).map(Number) as [
-      number,
-      number,
-      number,
-      number,
-      number,
-      number,
-    ];
-    const serverAsUtc = Date.UTC(year, month - 1, day, hour, minute, second);
-    return Math.round((serverAsUtc - Date.now()) / QUARTER_HOUR) * QUARTER_HOUR;
+    return serverClockOffsetMs(this.page);
   }
 
   /**
@@ -485,61 +515,32 @@ export class OrderPanel {
     }).toPass({ timeout: 60_000 });
   }
 
-  /** Opens a dropdown and clicks one option, unless it is already selected. */
-  private async choose(dropdown: Locator, option: string): Promise<void> {
-    if ((await dropdown.innerText()).trim() === option) return;
-    await dropdown.click();
-    // The open list follows the trigger, which also shows the current value.
-    await dropdown.getByText(option, { exact: true }).last().click();
-    await expect(dropdown).toHaveText(option);
-  }
-
   /**
-   * Clicks the place button and confirms the dialog when it is shown. Resolves once the server
-   * accepted the order; throws {@link OrderRejectedError} otherwise.
+   * Clicks the place button and confirms the dialog when it is shown (One-Click Trading sends the
+   * order at once). Resolves once the server accepted the order; throws `OrderRejectedError`
+   * otherwise (see {@link submitTradeRequest}).
    */
-  private async submit(kind: keyof typeof ORDER_API): Promise<void> {
+  private async submit(kind: 'market' | 'pending'): Promise<void> {
     await expect(this.placeButton, 'the place button should be enabled').toBeEnabled();
     this.lastConfirmation = null;
-    const request = this.page.waitForRequest(
-      (r) => r.method() === 'POST' && new URL(r.url()).pathname === ORDER_API[kind],
-      { timeout: 30_000 },
-    );
-    let sent = false;
-    request.then(
-      () => (sent = true),
-      () => (sent = true),
-    );
-    await this.placeButton.click();
-    // One-Click Trading sends the order at once; otherwise the confirmation dialog opens first.
-    await expect
-      .poll(async () => sent || (await this.confirmation.isOpen()), {
-        message: 'the order should be sent or the confirmation dialog shown',
-      })
-      .toBe(true);
-    if (!sent) {
-      this.lastConfirmation = await this.confirmation.read();
-      await this.confirmation.confirm();
+    const path = kind === 'market' ? TRADE_API.marketOrder : TRADE_API.pendingOrder;
+    try {
+      await submitTradeRequest(this.page, {
+        action: `Placing the ${kind} order`,
+        trigger: this.placeButton,
+        confirm: this.confirmation.confirmButton,
+        completeDialog: async () => {
+          this.lastConfirmation = await this.confirmation.read();
+          await this.confirmation.confirm();
+        },
+        matches: (r) => r.method() === 'POST' && new URL(r.url()).pathname === path,
+        errors: this.validation,
+      });
+    } catch (error) {
+      // Leave the form usable for the next step of the test; the refusal is what gets reported.
+      if (await this.confirmation.isOpen()) await this.confirmation.cancel().catch(() => undefined);
+      throw error;
     }
-    const order = await request;
-    await this.checkAccepted(await order.response(), order.failure()?.errorText);
     if (this.lastConfirmation) await expect(this.confirmation.confirmButton).toBeHidden();
-  }
-
-  /** Like the web trader, judges the reply by its HTTP status; the body only explains a refusal. */
-  private async checkAccepted(response: Response | null, failure?: string): Promise<void> {
-    if (response?.ok()) return;
-    const body = (await response?.json().catch(() => null)) as {
-      code?: string | number;
-      message?: string;
-    } | null;
-    // Leave the form usable for the next step of the test.
-    if (await this.confirmation.isOpen()) await this.confirmation.cancel();
-    const shown = (await this.toast.allInnerTexts()).join(' / ');
-    throw new OrderRejectedError(
-      String(body?.code ?? response?.status() ?? 'NO_RESPONSE'),
-      [body?.message ?? failure, shown && `UI: ${shown}`].filter(Boolean).join(' | '),
-      response?.status() ?? 0,
-    );
   }
 }

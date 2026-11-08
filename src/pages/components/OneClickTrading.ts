@@ -1,11 +1,15 @@
 import { expect, type Locator, type Page, type Request, type Response } from '@playwright/test';
 import { requireUiNumber } from '../../helpers/numbers';
 import type { Quote, Side } from '../../models/trading';
+import { TRADE_API } from './tradeRequests';
 
 /** Endpoint the web trader uses to save a user preference (One-Click Trading among them). */
 const PREFERENCE_API = '/api/user/setting/v1/preference';
-/** Endpoint every market order is sent to, from the One-Click panel and from the Trade form. */
-export const MARKET_ORDER_API = '/api/trade/trade/v1/market';
+/**
+ * Endpoint every market order is sent to, from the One-Click panel and from the Trade form. Same
+ * as `TRADE_API.marketOrder`; kept under this name for the specs that import it.
+ */
+export const MARKET_ORDER_API = TRADE_API.marketOrder;
 
 const isPreferenceWrite = (r: Response): boolean =>
   r.request().method() === 'PATCH' && new URL(r.url()).pathname === PREFERENCE_API;
