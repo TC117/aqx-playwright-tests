@@ -15,11 +15,14 @@ export default defineConfig({
   // A retry could place a second order, so trading tests are never retried.
   retries: 0,
   timeout: 90_000,
+  // Stop cleanly (fixtures still tear down) before the CI job's own limit would kill the run.
+  globalTimeout: env.isCI ? 50 * 60_000 : undefined,
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: env.baseUrl || undefined,
-    trace: 'retain-on-failure',
+    // Traces record request headers and typed values, i.e. the bearer token. Keep them local.
+    trace: env.isCI ? 'off' : 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     actionTimeout: 15_000,
@@ -29,7 +32,8 @@ export default defineConfig({
     {
       name: 'setup',
       testMatch: /.*\.setup\.ts/,
-      use: desktop,
+      // The login step handles the password and the token: never keep evidence of it.
+      use: { ...desktop, trace: 'off', video: 'off', screenshot: 'off' },
     },
     {
       // Login page checks; no session needed.

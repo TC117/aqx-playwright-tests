@@ -35,7 +35,8 @@ jobs:
     name: Playwright
     needs: static
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Above the suite's own globalTimeout (50 min), so fixtures can still clean up.
+    timeout-minutes: 60
     env:
       BASE_URL: https://aqxtrader.aquariux.com
       # Repository secrets. Without them (e.g. pull requests from forks) logged-in tests skip.
