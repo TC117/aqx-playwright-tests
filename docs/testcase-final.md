@@ -88,7 +88,7 @@ stop-limit orders), not the current market price.
   - `Slow` – automated, waits for time or price movement; time-boxed, skips with a reason if the
     price does not move; runs nightly (`@slow`).
   - `Mocked` – automated UI-level check with intercepted server responses or events, real login
-    kept (`@mocked`, folder `tests/ui-mocked/`). It proves the UI reacts correctly; it never
+    kept (`@mocked`, folder `tests/mocked/`). It proves the UI reacts correctly; it never
     replaces the real test of what the server decides.
   - `Manual` – manual checklist.
   - `A + B` (e.g. `Slow + Mocked`) – the case has two parts, each run as labelled; it is counted
@@ -403,7 +403,7 @@ A case with two run types (for example `Slow + Mocked`) is counted under each of
 - Helpers: live quote (Bid/Ask), symbol spec (digits, stops level, min/max/step volume),
   market-status check.
 - Fixtures: clean-up of the test symbols; OCT reset.
-- Playwright projects: `trading` (real, `Regular`), `mocked` for `tests/ui-mocked/` (depends on
+- Playwright projects: `trading` (real, `Regular`), `mocked` for `tests/mocked/` (depends on
   `setup`, `serviceWorkers: 'block'`), and a nightly run selecting `@slow`.
 - Tags: `@p1`, `@p2`, `@p3`, `@slow`, `@mocked`, `@market-open`, `@market-closed`.
 

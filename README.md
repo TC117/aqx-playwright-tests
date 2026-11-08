@@ -33,13 +33,13 @@ TypeScript. They run against the live demo platform on a demo account with virtu
 
 Each kind of test is a Playwright project, so it runs only where it makes sense:
 
-| Project    | Folder           | Login | What it checks                                                                                                                                        |
-| ---------- | ---------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `setup`    | `tests/`         | –     | Logs in, or reuses a session the server still accepts, and saves it                                                                                   |
-| `smoke`    | `tests/smoke`    | no    | Login page                                                                                                                                            |
-| `terminal` | `tests/terminal` | yes   | Anything that works in any market state: validation, Trade Details maths, settings, closed-market behaviour, records already on the account           |
-| `mocked`   | `tests/mocked`   | yes   | The real web app with the server's **read** replies replaced: order requests, dialogs, tables, history and notifications. No order reaches the server |
-| `trading`  | `tests/trading`  | yes   | Real orders on the demo account; each test skips while its market is closed                                                                           |
+| Project    | Folder           | Login | What it checks                                                                                                                                              |
+| ---------- | ---------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setup`    | `tests/`         | –     | Logs in, or reuses a session the server still accepts, and saves it                                                                                         |
+| `smoke`    | `tests/smoke`    | no    | Login page                                                                                                                                                  |
+| `terminal` | `tests/terminal` | yes   | Anything that works in any market state: validation, Trade Details maths, settings, closed-market behaviour, records already on the account                 |
+| `mocked`   | `tests/mocked`   | yes   | The real web app with the server's **read** replies replaced: order requests, dialogs, tables, history and notifications. No order write reaches the server |
+| `trading`  | `tests/trading`  | yes   | Real orders on the demo account; each test skips while its market is closed                                                                                 |
 
 ```
 src/
@@ -103,7 +103,7 @@ Totals: smoke 1, terminal 45, mocked 44, trading 48.
 
 - **Real platform first; mock only what the server reports.** `mocked` tests replace read replies
   (market status, positions, history, notifications) so the UI can be checked in states the demo
-  cannot produce today. Write requests are answered in the browser or aborted, never sent. A
+  cannot produce today. Order writes are answered in the browser or aborted (a project-wide guard aborts any a test did not answer), so they never reach the server; only the app's housekeeping writes (session keep-alive, marking notifications read, search history) do. A
   mocked test proves what the UI shows and sends, not what the server decides.
 - **The platform decides whether the market is open.** `skipUnlessMarketOpen` reads the symbol's
   status from the platform's API. A test never infers "closed" from missing prices, so an outage
@@ -125,6 +125,9 @@ Totals: smoke 1, terminal 45, mocked 44, trading 48.
   ends an older session of the account.
 - **Serial, no retries.** One shared account → `workers: 1`; a retry could place a second order →
   `retries: 0`.
+- **Failure evidence without secrets.** Failed tests keep a trace, screenshot and video locally.
+  CI keeps only screenshots and videos, because a trace records request headers (the bearer
+  token); the login step keeps no evidence at all.
 - **Locators.** The app's own `data-testid` attributes first, then roles and text scoped to a
   container. No generated CSS classes, no XPath for elements, no `force` clicks.
 
@@ -149,6 +152,8 @@ uploaded as an artifact.
 - **Shared account:** tests run serially and own their orders; bulk-action tests skip if anything
   else is open. One-Click Trading is an account-wide setting; tests restore it.
 - **Hedging** is assumed (a Buy and a Sell on the same symbol can be open together).
-- **Not automated:** behaviour that needs the market to move (SL/TP hits, pending triggers),
+- **Not automated:** SL/TP hits and pending-order triggers (they need the market to move far
+  enough; only the profitable/losing bulk close waits up to 3 minutes for a move), insufficient
+  margin (TC-MKT-12: the demo's 1,000,000 USD covers even the 100-lot maximum),
   re-login (it would end other sessions), and anything outside the brief (registration,
   deposits, charts, mobile).

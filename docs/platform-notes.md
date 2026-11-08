@@ -8,7 +8,7 @@ How each fact was obtained:
 
 - **Live:** seen on the real demo account (markets were closed on the last day).
 - **Mocked:** seen in the real web app with the server's _read_ responses replaced
-  (`tests/mocked`); write requests were answered in the browser or aborted, never sent.
+  (`tests/mocked`); order writes were answered in the browser or aborted, never sent.
 - **Inferred:** from the app's own JavaScript or field names; not yet seen working.
 
 ## Account and session
@@ -33,21 +33,21 @@ How each fact was obtained:
 
 ## Orders
 
-| Fact                                                                                                                                                                                                                                 | How      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| Market order: `POST /api/trade/trade/v1/market` `{orderType 0 BUY / 1 SELL, symbol, lotSize, fillPolicy 0, indicate "PRICE", stopLoss?, takeProfit?}`                                                                                | Mocked   |
-| Pending order: `POST /api/trade/trade/v1/limit` `{orderType, symbol, lotSize, price, priceTrigger, fillPolicy, indicate, stopLoss?, takeProfit?, expiration?, tradeExpiry}`                                                          | Mocked   |
-| Modify: `PATCH /api/trade/trade/v1/market` and `/limit`; close: `PUT /api/trade/trade/v1`; delete pending: `DELETE /api/trade/trade/v1?symbol=&orderId=`; bulk: `PUT /api/trade/trade/v1/bulk`, `PUT /api/trade/trade/v1/limit/bulk` | Mocked   |
-| Order types (enum): 0 BUY, 1 SELL, 2 BUY LIMIT, 3 SELL LIMIT, 4 BUY STOP, 5 SELL STOP, 6 BALANCE, 7 CREDIT, 8/9 STOP LIMIT                                                                                                           | Inferred |
-| Order Type offers Market, Limit, Stop and Stop Limit on EURUSD, the same list as `orderTypes` in the symbol detail                                                                                                                   | Live     |
-| Expiry options: Good Till Canceled (default), Good Till Day, Specified Date and Time, Specified Date (the symbol detail's `expirationTypes`)                                                                                         | Live     |
-| "Specified Date and Time" sends the picked moment in epoch ms; "Specified Date" sends 00:00 of that day in server time (GMT+2); the calendar starts at today in server time and disables past days                                   | Mocked   |
-| Trading hours on the Specification tab ("GMT +0200", Mon–Fri 00:00 – 24:00 for EURUSD) match `tradingSessions` in the symbol detail                                                                                                  | Live     |
-| Fill policy: Fill or Kill for market orders, Return for pending orders                                                                                                                                                               | Live     |
-| SL/TP can be entered as a price or in points                                                                                                                                                                                         | Live     |
-| EURUSD: 4 digits, point 0.0001, contract 100,000, min 0.01, step 0.01, max 100 lots                                                                                                                                                  | Live     |
-| Trade Details: margin = lots × contract size × price ÷ leverage; amount per tick = units × point                                                                                                                                     | Live     |
-| The confirmation dialog is "Order Confirmation" (`trade-confirmation-*`); it is skipped while One-Click Trading is on                                                                                                                | Mocked   |
+| Fact                                                                                                                                                                                                                                 | How    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| Market order: `POST /api/trade/trade/v1/market` `{orderType 0 BUY / 1 SELL, symbol, lotSize, fillPolicy 0, indicate "PRICE", stopLoss?, takeProfit?}`                                                                                | Mocked |
+| Pending order: `POST /api/trade/trade/v1/limit` `{orderType, symbol, lotSize, price, priceTrigger, fillPolicy, indicate, stopLoss?, takeProfit?, expiration?, tradeExpiry}`                                                          | Mocked |
+| Modify: `PATCH /api/trade/trade/v1/market` and `/limit`; close: `PUT /api/trade/trade/v1`; delete pending: `DELETE /api/trade/trade/v1?symbol=&orderId=`; bulk: `PUT /api/trade/trade/v1/bulk`, `PUT /api/trade/trade/v1/limit/bulk` | Mocked |
+| Order types (enum, as sent in requests and rendered in tables): 0 BUY, 1 SELL, 2 BUY LIMIT, 3 SELL LIMIT, 4 BUY STOP, 5 SELL STOP, 6 BALANCE, 7 CREDIT, 8/9 STOP LIMIT                                                               | Mocked |
+| Order Type offers Market, Limit, Stop and Stop Limit on EURUSD, the same list as `orderTypes` in the symbol detail                                                                                                                   | Live   |
+| Expiry options: Good Till Canceled (default), Good Till Day, Specified Date and Time, Specified Date (the symbol detail's `expirationTypes`)                                                                                         | Live   |
+| "Specified Date and Time" sends the picked moment in epoch ms; "Specified Date" sends 00:00 of that day in server time (GMT+2); the calendar starts at today in server time and disables past days                                   | Mocked |
+| Trading hours on the Specification tab ("GMT +0200", Mon–Fri 00:00 – 24:00 for EURUSD) match `tradingSessions` in the symbol detail                                                                                                  | Live   |
+| Fill policy: Fill or Kill for market orders, Return for pending orders                                                                                                                                                               | Live   |
+| SL/TP can be entered as a price or in points                                                                                                                                                                                         | Live   |
+| EURUSD: 4 digits, point 0.0001, contract 100,000, min 0.01, step 0.01, max 100 lots                                                                                                                                                  | Live   |
+| Trade Details: margin = lots × contract size × price ÷ leverage; amount per tick = units × point                                                                                                                                     | Live   |
+| The confirmation dialog is "Order Confirmation" (`trade-confirmation-*`); it is skipped while One-Click Trading is on                                                                                                                | Mocked |
 
 ## One-Click Trading
 
