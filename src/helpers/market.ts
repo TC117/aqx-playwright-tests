@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import type { AqxApi } from '../api/AqxApi';
+import { isTradable, type AqxApi } from '../api/AqxApi';
 
 /**
  * Skips the current test unless `symbol` can be traded right now.
@@ -9,9 +9,8 @@ import type { AqxApi } from '../api/AqxApi';
  */
 export async function skipUnlessMarketOpen(api: AqxApi, symbol: string): Promise<void> {
   const s = await api.symbol(symbol);
-  const open = await api.isMarketOpen(symbol);
   test.skip(
-    !open,
+    !isTradable(s),
     `${symbol} market is closed (status ${s.status}, market status ${s.marketStatus}); this test needs live order execution`,
   );
 }

@@ -135,6 +135,11 @@ export interface ServerPendingOrder {
 /** Market states that mean "no trading possible right now". */
 const CLOSED_STATES = new Set(['CLOSED', 'OFFQUOTES']);
 
+/** True when the symbol is quoting and can be traded right now. */
+export function isTradable(s: Pick<SymbolSummary, 'status' | 'marketStatus'>): boolean {
+  return !CLOSED_STATES.has(s.status) && !CLOSED_STATES.has(s.marketStatus);
+}
+
 export class AqxApi {
   private constructor(private readonly http: APIRequestContext) {}
 
@@ -184,8 +189,7 @@ export class AqxApi {
 
   /** True when the symbol is quoting and can be traded right now. */
   async isMarketOpen(symbol: string): Promise<boolean> {
-    const s = await this.symbol(symbol);
-    return !CLOSED_STATES.has(s.status) && !CLOSED_STATES.has(s.marketStatus);
+    return isTradable(await this.symbol(symbol));
   }
 
   async account(): Promise<TradingAccount> {
