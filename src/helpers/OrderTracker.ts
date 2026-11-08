@@ -7,6 +7,12 @@ import { closeTo, parseUiNumber } from './numbers';
 /** What a test placed, so the tracker can tell its order from other activity on the account. */
 export type OrderMatch = Pick<MarketOrderInput, 'side' | 'volume'>;
 
+/** Order Nos. of every position and pending order on the account at one moment. */
+export interface OrderSnapshot {
+  positions: Set<string>;
+  pending: Set<string>;
+}
+
 /** The fields of a server position or pending order the tracker reads. */
 interface ServerItem {
   orderId: string | number;
@@ -74,6 +80,12 @@ export class OrderTracker {
     return new Set((await this.api.pendingOrders()).map(idOf));
   }
 
+  /** Both lists at once, to take before placing a pending order (it may fill at once). */
+  async snapshot(): Promise<OrderSnapshot> {
+    const [positions, pending] = await Promise.all([this.positionIds(), this.pendingIds()]);
+    return { positions, pending };
+  }
+
   /**
    * Waits until exactly one position not in `before` matches `order` (symbol, side, volume), takes
    * ownership of it, and waits until Open Positions lists it.
@@ -95,15 +107,30 @@ export class OrderTracker {
     return id;
   }
 
-  /** Same as {@link newPosition} for a pending order; waits until Pending Orders lists it. */
-  async newPendingOrder(before: Set<string>, order: OrderMatch): Promise<string> {
-    const ownNew = (): Promise<string[]> => this.ownNewPendingOrders(before, order);
+  /**
+   * Same as {@link newPosition} for a pending order; waits until Pending Orders lists it. An order
+   * that fills before it is ever listed as pending shows up as a position instead: that position
+   * is owned (so clean-up closes it) and the call fails, since the test expected a pending order.
+   */
+  async newPendingOrder(before: OrderSnapshot, order: OrderMatch): Promise<string> {
+    let filled: string[] = [];
+    const ownNew = async (): Promise<string[]> => {
+      const pending = await this.ownNewPendingOrders(before.pending, order);
+      filled = pending.length ? [] : await this.ownNewPositions(before.positions, order);
+      return pending;
+    };
     const id = await this.waitForOneNew(
       'pending order',
       ownNew,
       () => this.api.pendingOrders(),
-      before,
+      before.pending,
+      () => filled.length > 0,
     );
+    if (filled.length) {
+      throw new Error(
+        `Pending order filled at once as position ${filled.join(', ')}; it is owned, so clean-up closes it`,
+      );
+    }
     await this.tradePage.pendingOrders.open();
     await expect(
       this.tradePage.pendingOrders.row(id),
@@ -301,19 +328,29 @@ export class OrderTracker {
   }
 
   /**
-   * Polls `ownNew` until it reports exactly one id. Every matching id is owned at once, so if the
-   * UI created more than one (e.g. a double submit), clean-up still removes all of them. New items
-   * that do not match (another session trading on the shared account) are left alone.
+   * Polls `ownNew` until it reports exactly one id, or until `stop` says to give up waiting (the
+   * caller then handles why). Every matching id is owned at once, so if the UI created more than
+   * one (e.g. a double submit), clean-up still removes all of them. New items that do not match
+   * (another session trading on the shared account) are left alone.
    */
   private async waitForOneNew(
     what: string,
     ownNew: () => Promise<string[]>,
     list: () => Promise<ServerItem[]>,
     before: Set<string>,
+    stop: () => boolean = () => false,
   ): Promise<string> {
     let mine: string[] = [];
     try {
-      await expect.poll(async () => (mine = await ownNew()).length, { timeout: 20_000 }).toBe(1);
+      await expect
+        .poll(
+          async () => {
+            mine = await ownNew();
+            return mine.length === 1 || stop();
+          },
+          { timeout: 20_000 },
+        )
+        .toBe(true);
     } catch (pollError) {
       let others = '';
       try {

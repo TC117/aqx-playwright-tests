@@ -346,7 +346,7 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
       const { spec, away } = await levels(api, symbol);
       const { ask } = await tradePage.orderPanel.quote();
       const price = away(ask, -3);
-      const before = await orders.pendingIds();
+      const before = await orders.snapshot();
       await tradePage.orderPanel.placePendingOrder({
         type: 'Limit',
         side: 'BUY',
@@ -398,7 +398,7 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
     }) => {
       const { spec, away } = await levels(api, symbol);
       const { ask } = await tradePage.orderPanel.quote();
-      const before = await orders.pendingIds();
+      const before = await orders.snapshot();
       await tradePage.orderPanel.placePendingOrder({
         type: 'Limit',
         side: 'BUY',

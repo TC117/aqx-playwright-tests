@@ -114,31 +114,17 @@ function requestedVolume(row: PendingOrderRow): number | null {
 /**
  * Places an order that the server is expected to refuse. If it is accepted after all, whatever it
  * created is taken over so clean-up removes it: the pending order, or the position when it filled
- * at once. The promise then resolves, which fails the caller's `rejects` check.
+ * at once. The promise then resolves (or rejects without the platform's code), which fails the
+ * caller's `rejects` check.
  */
 async function placeExpectingRejection(
   panel: OrderPanel,
   orders: OrderTracker,
   order: PendingOrderInput,
 ): Promise<void> {
-  const pendingBefore = await orders.pendingIds();
-  const positionsBefore = await orders.positionIds();
+  const before = await orders.snapshot();
   await panel.placePendingOrder(order);
-  let placed = 0;
-  await expect
-    .poll(
-      async () => {
-        const opened = await orders.ownNewPositions(positionsBefore, order);
-        placed = (await orders.ownNewPendingOrders(pendingBefore, order)).length;
-        return opened.length + placed;
-      },
-      {
-        message: 'the accepted order should be listed as a pending order or a position',
-        timeout: 20_000,
-      },
-    )
-    .toBeGreaterThan(0);
-  if (placed) await orders.newPendingOrder(pendingBefore, order);
+  await orders.newPendingOrder(before, order);
 }
 
 test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () => {
@@ -166,7 +152,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
       const spec = await api.symbolDetail(symbol);
       const panel = tradePage.orderPanel;
       const marginBefore = (await api.account()).margin;
-      const before = await orders.pendingIds();
+      const before = await orders.snapshot();
       await panel.openTradeForm();
       const prices = pendingPrices(
         type,
@@ -226,7 +212,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
       }) => {
         const spec = await api.symbolDetail(symbol);
         const panel = tradePage.orderPanel;
-        const before = await orders.pendingIds();
+        const before = await orders.snapshot();
         await panel.openTradeForm();
         const offset = await panel.serverTimeOffsetMs();
         const today = serverClock(new Date(), offset);
@@ -270,7 +256,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
     const spec = await api.symbolDetail(symbol);
     const panel = tradePage.orderPanel;
     const gap = spec.stopsLevel + 20;
-    const before = await orders.pendingIds();
+    const before = await orders.snapshot();
     await panel.openTradeForm();
     const quote = await panel.quote();
     const spreadPoints = Math.round((quote.ask - quote.bid) / spec.pointStep);
@@ -358,7 +344,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
     });
 
     await test.step('5 points outside the stops level: accepted at that price', async () => {
-      const before = await orders.pendingIds();
+      const before = await orders.snapshot();
       const outside = await buyLimit(spec.stopsLevel + 5);
       await panel.placePendingOrder(outside);
       const row = await tradePage.pendingOrders.read(await orders.newPendingOrder(before, outside));
@@ -387,7 +373,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
         expiry,
         expiresAt,
       };
-      const before = await orders.pendingIds();
+      const before = await orders.snapshot();
       await panel.placePendingOrder(order);
       const orderId = await orders.newPendingOrder(before, order);
       expect(await tradePage.pendingOrders.read(orderId)).toMatchObject({

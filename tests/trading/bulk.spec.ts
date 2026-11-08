@@ -36,7 +36,7 @@ async function placePending(
   orders: OrderTracker,
   order: PendingOrderInput,
 ): Promise<string> {
-  const before = await orders.pendingIds();
+  const before = await orders.snapshot();
   await tradePage.orderPanel.placePendingOrder(order);
   return orders.newPendingOrder(before, order);
 }

@@ -264,7 +264,7 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
       };
 
       const id = await test.step('place a Buy Limit: listed in Pending Orders', async () => {
-        const before = await orders.pendingIds();
+        const before = await orders.snapshot();
         await orderPanel.placePendingOrder({
           type: 'Limit',
           side: 'BUY',
