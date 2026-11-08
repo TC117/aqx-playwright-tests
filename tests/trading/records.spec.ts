@@ -1,4 +1,9 @@
-import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env';
+import {
+  env,
+  hasCredentials,
+  MISSING_CREDENTIALS_REASON,
+  TRADING_NOT_ALLOWED_REASON,
+} from '../../src/config/env';
 import { test, expect } from '../../src/fixtures/test';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
 import {
@@ -57,6 +62,8 @@ async function freshPositionRows(
 
 test.describe('Records of real orders', { tag: '@market-open' }, () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
+  // Before any fixture opens the trade screen; the `orders` fixture checks it again.
+  test.skip(!env.allowTrading, TRADING_NOT_ALLOWED_REASON);
 
   test(
     'TC-DTL-01 TC-DTL-03 A Buy opened, partly closed and closed appears consistently in every record',

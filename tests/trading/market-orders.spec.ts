@@ -1,4 +1,9 @@
-import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env';
+import {
+  env,
+  hasCredentials,
+  MISSING_CREDENTIALS_REASON,
+  TRADING_NOT_ALLOWED_REASON,
+} from '../../src/config/env';
 import { expect, test } from '../../src/fixtures/test';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
 import { parseUiNumber } from '../../src/helpers/numbers';
@@ -69,6 +74,8 @@ test.describe(
   { tag: ['@R1', '@market-open'] },
   () => {
     test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
+    // Before any fixture opens the trade screen; the `orders` fixture checks it again.
+    test.skip(!env.allowTrading, TRADING_NOT_ALLOWED_REASON);
 
     test.beforeEach(async ({ api, symbol }) => {
       await skipUnlessMarketOpen(api, symbol);

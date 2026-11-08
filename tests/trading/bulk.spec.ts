@@ -1,6 +1,11 @@
 import type { Page, Request } from '@playwright/test';
 import type { AqxApi } from '../../src/api/AqxApi';
-import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env';
+import {
+  env,
+  hasCredentials,
+  MISSING_CREDENTIALS_REASON,
+  TRADING_NOT_ALLOWED_REASON,
+} from '../../src/config/env';
 import { test, expect } from '../../src/fixtures/test';
 import type { OrderTracker } from '../../src/helpers/OrderTracker';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
@@ -110,6 +115,8 @@ function nextBulkRequest(page: Page, path: string): Promise<string[]> {
 
 test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open'] }, () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
+  // Before any fixture opens the trade screen; the `orders` fixture checks it again.
+  test.skip(!env.allowTrading, TRADING_NOT_ALLOWED_REASON);
 
   test.beforeEach(async ({ api, symbol }) => {
     await skipUnlessMarketOpen(api, symbol);

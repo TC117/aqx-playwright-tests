@@ -1,5 +1,10 @@
 import type { Page } from '@playwright/test';
-import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env';
+import {
+  env,
+  hasCredentials,
+  MISSING_CREDENTIALS_REASON,
+  TRADING_NOT_ALLOWED_REASON,
+} from '../../src/config/env';
 import { test as base, expect } from '../../src/fixtures/test';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
 import { roundLots, roundTo } from '../../src/helpers/numbers';
@@ -86,6 +91,8 @@ const PRESETS: {
 
 test.describe('One-Click Trading on the real server', { tag: ['@R2', '@market-open'] }, () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
+  // Before any fixture opens the trade screen; the `orders` fixture checks it again.
+  test.skip(!env.allowTrading, TRADING_NOT_ALLOWED_REASON);
 
   for (const { id, side, place, fillPrice } of ONE_CLICK_CASES) {
     test(`${id} One-Click ${side} opens one ${side} position at once, without a confirmation`, async ({

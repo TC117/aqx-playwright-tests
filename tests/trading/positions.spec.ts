@@ -1,5 +1,10 @@
 import type { AqxApi, SymbolDetail } from '../../src/api/AqxApi';
-import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env';
+import {
+  env,
+  hasCredentials,
+  MISSING_CREDENTIALS_REASON,
+  TRADING_NOT_ALLOWED_REASON,
+} from '../../src/config/env';
 import { test, expect } from '../../src/fixtures/test';
 import type { OrderTracker } from '../../src/helpers/OrderTracker';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
@@ -87,6 +92,8 @@ async function expectServerAgrees(api: AqxApi, row: PositionRow, digits: number)
 
 test.describe('Managing positions and pending orders', { tag: ['@market-open'] }, () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
+  // Before any fixture opens the trade screen; the `orders` fixture checks it again.
+  test.skip(!env.allowTrading, TRADING_NOT_ALLOWED_REASON);
 
   test.beforeEach(async ({ api, symbol }) => {
     await skipUnlessMarketOpen(api, symbol);
