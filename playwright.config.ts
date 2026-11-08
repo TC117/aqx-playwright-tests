@@ -4,6 +4,8 @@ import { AUTH_FILE, env } from './src/config/env';
 // The web trader is a desktop-first terminal; a wide viewport keeps all panels visible.
 const desktop = { ...devices['Desktop Chrome'], viewport: { width: 1600, height: 900 } };
 const loggedIn = { ...desktop, storageState: AUTH_FILE };
+/** One retry on CI, only for the projects that never place an order (smoke, terminal, mocked). */
+const retriesWithoutOrders = env.isCI ? 1 : 0;
 
 export default defineConfig({
   testDir: './tests',
@@ -12,7 +14,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: env.isCI,
-  // A retry could place a second order, so trading tests are never retried.
+  // A retry could place a second order, so trading tests are never retried, and a retry of the
+  // setup would log in again. Only the projects below that never place orders set their own.
   retries: 0,
   timeout: 90_000,
   // Stop cleanly (fixtures still tear down) before the CI job's own limit would kill the run.
@@ -39,6 +42,7 @@ export default defineConfig({
       // Login page checks; no session needed.
       name: 'smoke',
       testDir: './tests/smoke',
+      retries: retriesWithoutOrders,
       use: desktop,
     },
     {
@@ -47,6 +51,7 @@ export default defineConfig({
       name: 'terminal',
       testDir: './tests/terminal',
       dependencies: ['setup'],
+      retries: retriesWithoutOrders,
       use: loggedIn,
     },
     {
@@ -62,6 +67,7 @@ export default defineConfig({
       name: 'mocked',
       testDir: './tests/mocked',
       dependencies: ['setup'],
+      retries: retriesWithoutOrders,
       use: { ...loggedIn, serviceWorkers: 'block' },
     },
   ],

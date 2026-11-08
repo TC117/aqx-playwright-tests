@@ -230,9 +230,11 @@ export class AqxApi {
 
   /** One-Click Trading preference as stored on the server for this account. */
   async isOneClickTradingEnabled(): Promise<boolean> {
-    const result = await this.get<{ value?: string }[]>(
-      '/api/user/setting/v1/preference?type=OCT_ENABLE&category=ONE_CLICK_TRADING',
-    );
+    // An account that never saved the preference may get `null` instead of a list.
+    const result =
+      (await this.get<{ value?: string }[] | null>(
+        '/api/user/setting/v1/preference?type=OCT_ENABLE&category=ONE_CLICK_TRADING',
+      )) ?? [];
     return result.some((p) => String(p.value).toLowerCase() === 'true');
   }
 

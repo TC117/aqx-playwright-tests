@@ -127,8 +127,9 @@ Totals: smoke 1, terminal 42, mocked 44, trading 49 (136 tests).
   never sleep.
 - **One login.** Setup reuses the saved session while the server accepts it, because each login
   ends an older session of the account.
-- **Serial, no retries.** One shared account → `workers: 1`; a retry could place a second order →
-  `retries: 0`.
+- **Serial, retries only without orders.** One shared account → `workers: 1`. A retry could
+  place a second order, so `trading` (and the login setup) never retries; `smoke`, `terminal`
+  and `mocked` retry once on CI.
 - **Failure evidence without secrets.** Failed tests keep a trace, screenshot and video locally.
   CI keeps only screenshots and videos, because a trace records request headers (the bearer
   token); the login step keeps no evidence at all.
