@@ -10,9 +10,7 @@ import type {
 } from '../../models/trading';
 import { TradeConfirmation, type ConfirmationDetails } from './TradeConfirmation';
 import { submitTradeRequest, TRADE_API } from './tradeRequests';
-
-// Moved to tradeRequests.ts; still exported here for the specs that import it from this file.
-export { OrderRejectedError } from './tradeRequests';
+import { VALIDATION_TEXT } from './validation';
 
 /** Numbers of the "Trade Details (USD)" block, in account currency; `null` while empty. */
 export interface TradeDetails {
@@ -48,9 +46,6 @@ export interface ServerClock {
   hour: number;
   minute: number;
 }
-
-/** Inline validation texts seen under the inputs, e.g. "Stop Loss must be less than Sell Price." */
-const VALIDATION_TEXT = /must be|^Please enter|^(Minimum|Maximum) .+ is /;
 
 /** Top bar clock, "Server Time : 2026-11-08 02:01:17". */
 const SERVER_TIME = /^Server Time\s*:/;

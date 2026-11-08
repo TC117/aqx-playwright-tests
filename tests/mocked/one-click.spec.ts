@@ -3,7 +3,8 @@ import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env
 import { expect } from '../../src/fixtures/test';
 import { mockedTest, ORDER_TYPE } from '../../src/helpers/mockMarket';
 import { marketLevels } from '../../src/helpers/orderLevels';
-import { MARKET_ORDER_API, type OneClickTrading } from '../../src/pages/components/OneClickTrading';
+import type { OneClickTrading } from '../../src/pages/components/OneClickTrading';
+import { TRADE_API } from '../../src/pages/components/tradeRequests';
 
 /**
  * One-Click Trading against a mocked open market (R2). The server still serves everything else;
@@ -19,7 +20,7 @@ const SUCCESS = 'Position has been created.';
 const FILL_OR_KILL = 0;
 
 const isMarketOrder = (r: Request): boolean =>
-  r.method() === 'POST' && new URL(r.url()).pathname === MARKET_ORDER_API;
+  r.method() === 'POST' && new URL(r.url()).pathname === TRADE_API.marketOrder;
 
 test.describe('One-Click Trading with a mocked open market', { tag: ['@R2', '@mocked'] }, () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
@@ -54,7 +55,7 @@ test.describe('One-Click Trading with a mocked open market', { tag: ['@R2', '@mo
         expect(orderRequests).toEqual([
           {
             method: 'POST',
-            path: MARKET_ORDER_API,
+            path: TRADE_API.marketOrder,
             body: {
               orderType: ORDER_TYPE[side],
               symbol,
@@ -89,7 +90,7 @@ test.describe('One-Click Trading with a mocked open market', { tag: ['@R2', '@mo
       expect(orderRequests).toEqual([
         {
           method: 'POST',
-          path: MARKET_ORDER_API,
+          path: TRADE_API.marketOrder,
           body: {
             orderType: ORDER_TYPE[side],
             symbol,

@@ -16,7 +16,8 @@ import type {
   PendingOrderType,
   Side,
 } from '../../src/models/trading';
-import { OrderRejectedError, serverClock } from '../../src/pages/components/OrderPanel';
+import { serverClock } from '../../src/pages/components/OrderPanel';
+import { OrderRejectedError } from '../../src/pages/components/tradeRequests';
 import type { ConfirmationDetails } from '../../src/pages/components/TradeConfirmation';
 
 /*

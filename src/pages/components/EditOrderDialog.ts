@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { Expiry } from '../../models/trading';
-import { VALIDATION_TEXT } from './EditPositionDialog';
+import { VALIDATION_TEXT } from './validation';
 import { pickExpiry } from './OrderPanel';
 import { TradeConfirmation } from './TradeConfirmation';
 import { submitTradeRequest, TRADE_API } from './tradeRequests';

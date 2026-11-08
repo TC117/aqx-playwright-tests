@@ -5,17 +5,11 @@ import { TRADE_API } from './tradeRequests';
 
 /** Endpoint the web trader uses to save a user preference (One-Click Trading among them). */
 const PREFERENCE_API = '/api/user/setting/v1/preference';
-/**
- * Endpoint every market order is sent to, from the One-Click panel and from the Trade form. Same
- * as `TRADE_API.marketOrder`; kept under this name for the specs that import it.
- */
-export const MARKET_ORDER_API = TRADE_API.marketOrder;
-
 const isPreferenceWrite = (r: Response): boolean =>
   r.request().method() === 'PATCH' && new URL(r.url()).pathname === PREFERENCE_API;
 
 const isMarketOrder = (r: Request): boolean =>
-  r.method() === 'POST' && new URL(r.url()).pathname === MARKET_ORDER_API;
+  r.method() === 'POST' && new URL(r.url()).pathname === TRADE_API.marketOrder;
 
 /**
  * One-Click Trading: the switch in the settings menu (gear icon) and the "One Click" panel tab.

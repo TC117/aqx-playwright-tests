@@ -1,10 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { TradeConfirmation } from './TradeConfirmation';
 import { submitTradeRequest, TRADE_API } from './tradeRequests';
-
-/** Inline validation texts, e.g. "Stop Loss must be less than Sell Price." */
-export const VALIDATION_TEXT =
-  /must be (less|greater) than|^Please enter|^(Minimum|Maximum) .+ is /;
+import { VALIDATION_TEXT } from './validation';
 
 /**
  * "Edit Position" dialog, opened by a row's edit button in Open Positions.

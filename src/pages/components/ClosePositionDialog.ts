@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { VALIDATION_TEXT } from './EditPositionDialog';
+import { VALIDATION_TEXT } from './validation';
 
 /**
  * "Confirm To Close Position" dialog, opened by a row's close button while One-Click Trading is
