@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page, type Response } from '@playwright/test';
 import { parseUiNumber } from '../../helpers/numbers';
 import { exactly } from '../../helpers/text';
+import { RENDERED_ROW_LIMIT } from './OpenPositions';
 import type { OrderDealRow, PositionHistoryRow } from '../../models/trading';
 
 /** Presets of the history date-range picker (`orders-date-picker-dropdown`). */
@@ -42,6 +43,21 @@ interface TabParts {
 
 const HISTORIES_API = '/api/order/v3/histories';
 const DEALS_API = '/api/trade/order/v1/deal/histories';
+
+/**
+ * Row count the history tables may stop at. The Open Positions table renders at most 30 rows;
+ * whether the history tables do too is what TC-HIS-13 (mocked) records, and it has not been seen
+ * yet. Until it has, history checks accept either outcome (see {@link listedRows}).
+ */
+export const HISTORY_ROW_LIMIT = RENDERED_ROW_LIMIT;
+
+/**
+ * Row counts a history table may show for `serverCount` records: all of them, or
+ * {@link HISTORY_ROW_LIMIT} when there are more than that.
+ */
+export function listedRows(serverCount: number): number[] {
+  return serverCount > HISTORY_ROW_LIMIT ? [serverCount, HISTORY_ROW_LIMIT] : [serverCount];
+}
 
 /**
  * Assets module > "Positions History" and "Orders & Deals" tabs.

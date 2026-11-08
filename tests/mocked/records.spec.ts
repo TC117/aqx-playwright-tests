@@ -4,7 +4,11 @@ import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env
 import { test, expect } from '../../src/fixtures/test';
 import { parseUiNumber } from '../../src/helpers/numbers';
 import { TradePage } from '../../src/pages/TradePage';
-import { toServerTime, waitForServerUtcOffset } from '../../src/pages/components/TradeHistory';
+import {
+  listedRows,
+  toServerTime,
+  waitForServerUtcOffset,
+} from '../../src/pages/components/TradeHistory';
 
 /**
  * One position's lifecycle rendered from fabricated server data: Buy 0.10 EURUSD opened, 0.04
@@ -246,14 +250,66 @@ async function fulfillGet(route: Route, result: unknown): Promise<void> {
   await route.fulfill({ json: { code: '200', result } });
 }
 
+/** What the mocked history reads answer: Positions History entries and Orders & Deals orders. */
+interface MockedRecords {
+  history: HistoryEntry[];
+  orders: object[];
+}
+
+/** The position lifecycle described at the top of this file. */
+const lifecycle = (template: HistoryEntry): MockedRecords => ({
+  history: positionHistory(template),
+  orders: ordersAndDeals(),
+});
+
+/**
+ * `count` closed Buy positions and `count` filled orders, newest first, one hour apart, built like
+ * the lifecycle records. Order Nos. count down from 9100000 + count, so the oldest is 9100001.
+ */
+function manyRecords(template: HistoryEntry, count: number): MockedRecords {
+  const at = (i: number): number => OPENED + (count - i) * HOUR;
+  const id = (i: number): string => String(9_100_000 + count - i);
+  const history = Array.from({ length: count }, (_, i) => ({
+    ...positionHistory(template)[0]!,
+    orderId: id(i),
+    positionId: id(i),
+    dealId: String(9_200_000 + count - i),
+    volume: 0.01,
+    lotSize: 0.01,
+    totalLotSize: 0.01,
+    units: 1_000,
+    status: 'CLOSED_NORMAL',
+    openTime: at(i) - HOUR / 2,
+    closeTime: at(i),
+  }));
+  const orders = Array.from({ length: count }, (_, i) =>
+    order({
+      orderId: id(i),
+      openTime: at(i),
+      closeTime: at(i),
+      orderType: 0,
+      state: 11,
+      lotSize: 0.01,
+      lotSizeFilled: 0.01,
+      units: 1_000,
+      fillPolicy: 0,
+      openPrice: POSITION.entry,
+      takeProfit: 0,
+      stopLoss: 0,
+    }),
+  );
+  return { history, orders };
+}
+
 /** Replaces the record reads and opens the trade screen. Routes must exist before the page loads. */
 async function openWithMockedRecords(
   page: Page,
   api: AqxApi,
+  records: (template: HistoryEntry) => MockedRecords = lifecycle,
 ): Promise<{ tradePage: TradePage; offset: number }> {
   const template = (await api.positionHistory(0)).find((e) => e.orderType === 6);
   expect(template, 'the real BALANCE entry is the schema template').toBeDefined();
-  const history = positionHistory(template!);
+  const { history, orders } = records(template!);
 
   await page.route(
     (u) => u.pathname === '/api/order/v3/histories' && u.searchParams.get('type') === 'POSITION',
@@ -261,7 +317,7 @@ async function openWithMockedRecords(
   );
   await page.route(
     (u) => u.pathname === '/api/trade/order/v1/deal/histories',
-    (route) => fulfillGet(route, ordersAndDeals()),
+    (route) => fulfillGet(route, orders),
   );
   await page.route(
     (u) =>
@@ -521,6 +577,53 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
       });
       expect(lastClose.openDate).toBe(details.fields['Created Time']);
       await notifications.closeOrderDetails();
+    },
+  );
+
+  test(
+    'TC-HIS-13 Positions History and Orders & Deals with 75 records list them all or stop at the known limit',
+    { tag: ['@R6'] },
+    async ({ page, api }) => {
+      // The shared account's history grows with every trading run; this finds out whether the
+      // tables keep every record reachable. The result is noted on the test (annotation
+      // "records listed"); HISTORY_ROW_LIMIT in TradeHistory.ts is set from it.
+      const count = 75;
+      const oldest = String(9_100_001);
+      const { tradePage } = await openWithMockedRecords(page, api, (t) => manyRecords(t, count));
+      const { history } = tradePage;
+
+      for (const [tab, open] of [
+        ['Positions History', () => history.openPositionsHistory()],
+        ['Orders & Deals', () => history.openOrdersAndDeals()],
+      ] as const) {
+        await test.step(tab, async () => {
+          await open();
+          await history.selectDateRange('All');
+          await expect(history.positionRows.first()).toBeVisible();
+          // Scroll to the end until no more rows appear, for a table that renders on scroll.
+          let shown = -1;
+          await expect
+            .poll(
+              async () => {
+                await history.positionRows.last().scrollIntoViewIfNeeded();
+                const now = await history.positionRows.count();
+                const settled = now === shown;
+                shown = now;
+                return settled;
+              },
+              { message: `${tab} should stop adding rows`, intervals: [500] },
+            )
+            .toBe(true);
+          test.info().annotations.push({
+            type: 'records listed',
+            description: `${tab}: ${shown} of ${count}`,
+          });
+          expect(listedRows(count), `${tab} rows`).toContain(shown);
+          await expect(history.row(oldest), 'the oldest record').toHaveCount(
+            shown === count ? 1 : 0,
+          );
+        });
+      }
     },
   );
 });
