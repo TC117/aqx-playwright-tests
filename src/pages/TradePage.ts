@@ -43,6 +43,16 @@ export class TradePage extends BasePage {
     this.account = new AccountInfo(page);
   }
 
+  /**
+   * Opens the trade screen and waits until the order panel has loaded the symbol's specification.
+   * The panel resets its form when that answer arrives, so anything typed earlier would be lost.
+   */
+  override async open(): Promise<void> {
+    const specLoaded = this.page.waitForResponse((r) => isSymbolDetail(r.url()));
+    await super.open();
+    await specLoaded;
+  }
+
   async waitUntilLoaded(): Promise<void> {
     await expect(this.selectedSymbol).not.toBeEmpty();
   }
@@ -50,7 +60,19 @@ export class TradePage extends BasePage {
   /** Makes `symbol` the active instrument (no-op when it already is). */
   async selectSymbol(symbol: string): Promise<void> {
     if ((await this.selectedSymbol.textContent())?.trim() === symbol) return;
+    // The header can show the new symbol before the panel has reset for it; wait for the reset.
+    const specLoaded = this.page.waitForResponse((r) => isSymbolDetail(r.url(), symbol));
     await this.symbolSearch.select(symbol);
     await expect(this.selectedSymbol).toHaveText(symbol);
+    await specLoaded;
   }
+}
+
+/** True for the order panel's symbol specification request (for `symbol`, when given). */
+function isSymbolDetail(url: string, symbol?: string): boolean {
+  const { pathname, searchParams } = new URL(url);
+  return (
+    pathname === '/api/market/v1/symbol/detail' &&
+    (symbol === undefined || searchParams.get('symbol') === symbol)
+  );
 }
