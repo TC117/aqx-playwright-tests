@@ -9,6 +9,7 @@ import {
   toServerTime,
   waitForServerUtcOffset,
 } from '../../src/pages/components/TradeHistory';
+import { firstVolume } from '../../src/helpers/numbers';
 
 /**
  * One position's lifecycle rendered from fabricated server data: Buy 0.10 EURUSD opened, 0.04
@@ -338,11 +339,6 @@ async function openWithMockedRecords(
   return { tradePage, offset: await offset };
 }
 
-/** First number of a volume cell, e.g. 0.04 for `0.04 / 0.1`. */
-function closedVolume(volumeText: string): number {
-  return Number(volumeText.split('/')[0]!.trim());
-}
-
 test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocked' }, () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
 
@@ -376,7 +372,7 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
           closeDate: toServerTime(c.at, offset),
         })),
       );
-      const total = byCloseTime.reduce((sum, r) => sum + closedVolume(r.volumeText), 0);
+      const total = byCloseTime.reduce((sum, r) => sum + firstVolume(r.volumeText), 0);
       expect(total).toBeCloseTo(POSITION.volume, 5);
       // readPosition gives the latest close.
       expect(await tradePage.history.readPosition(POSITION.orderId)).toEqual(byCloseTime.at(-1));
@@ -453,7 +449,7 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
             profit: outDeal!.profit,
             commission: outDeal!.commission,
           }).toEqual({
-            volume: closedVolume(historyRow!.volumeText),
+            volume: firstVolume(historyRow!.volumeText),
             price: historyRow!.closePrice,
             profit: historyRow!.profit,
             commission: historyRow!.commission,
@@ -525,7 +521,7 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
         const row = positionRows.find((r) => r.closeDate === item.time);
         expect(row, `history row closed at ${item.time}`).toBeDefined();
         expect(item.text).toBe(
-          `+${row!.profit!.toFixed(2)} BUY ${closedVolume(row!.volumeText)} volume(s) at ${row!.closePrice}`,
+          `+${row!.profit!.toFixed(2)} BUY ${firstVolume(row!.volumeText)} volume(s) at ${row!.closePrice}`,
         );
       }
     },
@@ -563,7 +559,7 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
           'Created Time': toServerTime(OPENED, offset),
           'Closed Time': lastClose.closeDate,
           'Order No.': lastClose.orderId,
-          Volume: String(closedVolume(lastClose.volumeText)),
+          Volume: String(firstVolume(lastClose.volumeText)),
           'Profit/Loss': `+${lastClose.profit!.toFixed(2)}`,
           'ROI%': '--',
           'Entry Price': String(lastClose.entryPrice),

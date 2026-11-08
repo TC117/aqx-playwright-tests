@@ -5,10 +5,15 @@ import { TRADE_API } from './tradeRequests';
 
 /** Endpoint the web trader uses to save a user preference (One-Click Trading among them). */
 const PREFERENCE_API = '/api/user/setting/v1/preference';
-const isPreferenceWrite = (r: Response): boolean =>
-  r.request().method() === 'PATCH' && new URL(r.url()).pathname === PREFERENCE_API;
 
-const isMarketOrder = (r: Request): boolean =>
+/** A request that saves a user preference (the One-Click switch sends a PATCH). */
+export const isPreferenceWrite = (r: Request): boolean =>
+  r.method() !== 'GET' && new URL(r.url()).pathname === PREFERENCE_API;
+
+const isPreferenceSaved = (r: Response): boolean => isPreferenceWrite(r.request());
+
+/** A market order request, from the One-Click panel or the Trade form. */
+export const isMarketOrder = (r: Request): boolean =>
   r.method() === 'POST' && new URL(r.url()).pathname === TRADE_API.marketOrder;
 
 /**
@@ -114,7 +119,7 @@ export class OneClickTrading {
     await this.openSettings();
     if (await this.switchOn.isVisible()) return this.closeSettings();
     await this.requestEnable();
-    const saved = this.page.waitForResponse(isPreferenceWrite);
+    const saved = this.page.waitForResponse(isPreferenceSaved);
     await this.agreeButton.click();
     expect((await saved).ok(), 'the server should save the One-Click setting').toBe(true);
     await expect(this.termsDialog).toBeHidden();
@@ -126,7 +131,7 @@ export class OneClickTrading {
   async disable(): Promise<void> {
     await this.openSettings();
     if (await this.switchOn.isVisible()) {
-      const saved = this.page.waitForResponse(isPreferenceWrite);
+      const saved = this.page.waitForResponse(isPreferenceSaved);
       await this.switchOn.click();
       expect((await saved).ok(), 'the server should save the One-Click setting').toBe(true);
       await expect(this.switchOff).toBeVisible();

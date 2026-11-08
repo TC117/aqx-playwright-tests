@@ -6,8 +6,7 @@ import {
 } from '../../src/config/env';
 import { expect, test } from '../../src/fixtures/test';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
-import { parseUiNumber } from '../../src/helpers/numbers';
-import type { OrderTracker } from '../../src/helpers/OrderTracker';
+import { firstVolume, parseUiNumber } from '../../src/helpers/numbers';
 import {
   executionPrice,
   levelsAround,
@@ -15,19 +14,11 @@ import {
   pendingTypeText,
   wrongSidePendingPrice,
 } from '../../src/helpers/orderLevels';
-import type {
-  Expiry,
-  PendingOrderInput,
-  PendingOrderRow,
-  PendingOrderType,
-  Side,
-} from '../../src/models/trading';
-import {
-  serverClock,
-  type OrderPanel,
-  type ServerClock,
-} from '../../src/pages/components/OrderPanel';
+import type { Expiry, PendingOrderInput, PendingOrderType, Side } from '../../src/models/trading';
+import { serverClock, type ServerClock } from '../../src/pages/components/OrderPanel';
 import type { ConfirmationDetails } from '../../src/pages/components/TradeConfirmation';
+import { placeExpectingRejection } from '../../src/helpers/tradingSteps';
+import { MT5_CODE } from '../../src/pages/components/tradeRequests';
 
 /*
  * R3: placing real pending orders on the demo account. Each test skips while the symbol's market
@@ -39,9 +30,6 @@ import type { ConfirmationDetails } from '../../src/pages/components/TradeConfir
  * The Expiry column shows the option's label; the Expiry Date cells were checked with fabricated
  * rows (see expectedExpiryDate).
  */
-
-/** MT5 code for an order price on the wrong side or too close to the market ("Invalid price"). */
-const INVALID_PRICE = '10015';
 
 const EXPIRIES: Expiry[] = [
   'Good Till Canceled',
@@ -111,27 +99,6 @@ function expectConfirmation(shown: ConfirmationDetails | null, order: PendingOrd
   expect(shown.fields['Fill Policy']).toBe('Return');
 }
 
-/** Requested volume of a Volume cell such as `0.01 / 0` (requested / filled). */
-function requestedVolume(row: PendingOrderRow): number | null {
-  return parseUiNumber(row.volumeText.split('/')[0]);
-}
-
-/**
- * Places an order that the server is expected to refuse. If it is accepted after all, whatever it
- * created is taken over so clean-up removes it: the pending order, or the position when it filled
- * at once. The promise then resolves (or rejects without the platform's code), which fails the
- * caller's `rejects` check.
- */
-async function placeExpectingRejection(
-  panel: OrderPanel,
-  orders: OrderTracker,
-  order: PendingOrderInput,
-): Promise<void> {
-  const before = await orders.snapshot();
-  await panel.placePendingOrder(order);
-  await orders.newPendingOrder(before, order);
-}
-
 test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
   // Before any fixture opens the trade screen; the `orders` fixture checks it again.
@@ -199,7 +166,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
           expiry: 'Good Till Canceled',
           expiryDate: '--',
         });
-        expect(requestedVolume(row)).toBe(order.volume);
+        expect(firstVolume(row.volumeText)).toBe(order.volume);
       });
 
       // A pending order holds no margin until it fills (account used serially, see §10).
@@ -310,13 +277,13 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
       const before = await orders.pendingIds();
 
       await expect(
-        placeExpectingRejection(panel, orders, {
+        placeExpectingRejection(tradePage, orders, {
           type,
           side,
           volume: spec.minContractLotSize,
           price,
         }),
-      ).rejects.toMatchObject({ code: INVALID_PRICE });
+      ).rejects.toMatchObject({ code: MT5_CODE.INVALID_PRICE });
       expect(await orders.pendingIds()).toEqual(before);
     });
   }
@@ -345,8 +312,8 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
     await test.step('5 points inside the stops level: refused', async () => {
       const before = await orders.pendingIds();
       await expect(
-        placeExpectingRejection(panel, orders, await buyLimit(spec.stopsLevel - 5)),
-      ).rejects.toMatchObject({ code: INVALID_PRICE });
+        placeExpectingRejection(tradePage, orders, await buyLimit(spec.stopsLevel - 5)),
+      ).rejects.toMatchObject({ code: MT5_CODE.INVALID_PRICE });
       expect(await orders.pendingIds()).toEqual(before);
     });
 

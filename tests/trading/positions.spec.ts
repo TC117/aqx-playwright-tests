@@ -6,12 +6,11 @@ import {
   TRADING_NOT_ALLOWED_REASON,
 } from '../../src/config/env';
 import { test, expect } from '../../src/fixtures/test';
-import type { OrderTracker } from '../../src/helpers/OrderTracker';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
 import { closeTo, offsetByPoints, roundLots, roundTo } from '../../src/helpers/numbers';
 import type { MarketOrderInput, PositionRow } from '../../src/models/trading';
-import type { TradePage } from '../../src/pages/TradePage';
-import { OrderRejectedError } from '../../src/pages/components/tradeRequests';
+import { MT5_CODE, OrderRejectedError } from '../../src/pages/components/tradeRequests';
+import { openPosition } from '../../src/helpers/tradingSteps';
 
 /**
  * Managing real positions and pending orders on the demo account (R4, and TC-PND-18 / 20 of R3).
@@ -24,9 +23,6 @@ import { OrderRejectedError } from '../../src/pages/components/tradeRequests';
 
 /** Extra points on top of the stops level, so moving prices do not make a valid level invalid. */
 const BUFFER_POINTS = 50;
-
-/** MT5 code for SL/TP too close to the market ("Invalid Stop loss or Take profit"). */
-const INVALID_STOPS = '10016';
 
 interface Levels {
   spec: SymbolDetail;
@@ -44,17 +40,6 @@ async function levels(api: AqxApi, symbol: string): Promise<Levels> {
     points,
     away: (price, n) => offsetByPoints(price, n * points, spec.pointStep, spec.digits),
   };
-}
-
-/** Places a market order and returns the Order No. of the position it opened. */
-async function openPosition(
-  tradePage: TradePage,
-  orders: OrderTracker,
-  order: MarketOrderInput,
-): Promise<string> {
-  const before = await orders.positionIds();
-  await tradePage.orderPanel.placeMarketOrder(order);
-  return orders.newPosition(before, order);
 }
 
 type ServerItem = Record<string, unknown>;
@@ -233,7 +218,7 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
         await dialog.fill({ stopLoss });
         const refused = dialog.submit(id);
         await expect(refused).rejects.toBeInstanceOf(OrderRejectedError);
-        await expect(refused).rejects.toMatchObject({ code: INVALID_STOPS });
+        await expect(refused).rejects.toMatchObject({ code: MT5_CODE.INVALID_STOPS });
         await dialog.dismiss();
       });
 

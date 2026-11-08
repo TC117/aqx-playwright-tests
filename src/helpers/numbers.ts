@@ -24,6 +24,11 @@ export function roundTo(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
 
+/** First number of a volume cell: 0.01 for `0.01 / 0.02` (closed / opened, or requested / filled). */
+export function firstVolume(volumeText: string): number {
+  return requireUiNumber(volumeText.split('/')[0], 'volume');
+}
+
 /** Number of decimals `n` is written with: 2 for 0.01, 7 for 1e-7. */
 export function decimalsOf(n: number): number {
   const [mantissa = '', exponent = '0'] = String(n).split('e');

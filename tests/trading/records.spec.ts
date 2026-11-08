@@ -18,6 +18,7 @@ import type {
   OrderDealRecord,
   PositionHistoryRecord,
 } from '../../src/pages/components/TradeHistory';
+import { firstVolume } from '../../src/helpers/numbers';
 
 /**
  * Real orders on the demo account, followed through every record: toast, order notifications,
@@ -32,11 +33,6 @@ import type {
 
 /** Distance of SL/TP and the pending price from the market, on top of the stops level. */
 const BUFFER_POINTS = 200;
-
-/** First number of a volume cell, e.g. 0.01 for `0.01 / 0.02`. */
-function closedVolume(volumeText: string): number {
-  return Number(volumeText.split('/')[0]!.trim());
-}
 
 /** What a record adds to the balance. */
 function booked(record: { profit: number | null; commission: number | null; swap: number | null }) {
@@ -152,7 +148,7 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
           stopLoss: opened.stopLoss,
           takeProfit: opened.takeProfit,
         });
-        const total = rows.reduce((sum, r) => sum + closedVolume(r.volumeText), 0);
+        const total = rows.reduce((sum, r) => sum + firstVolume(r.volumeText), 0);
         expect(roundLots(total, spec.lotSizeStep)).toBe(volume);
         return rows;
       });
@@ -192,7 +188,7 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
             .map((d) => [parseUiNumber(d.volumeText), d.entryPrice, d.profit])
             .sort();
           const fromHistory = historyRows
-            .map((r) => [closedVolume(r.volumeText), r.closePrice, r.profit])
+            .map((r) => [firstVolume(r.volumeText), r.closePrice, r.profit])
             .sort();
           expect(fromDeals).toEqual(fromHistory);
           return [...openingDeals, ...closingDeals];

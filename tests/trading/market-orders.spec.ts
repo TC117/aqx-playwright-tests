@@ -7,11 +7,11 @@ import {
 import { expect, test } from '../../src/fixtures/test';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
 import { parseUiNumber } from '../../src/helpers/numbers';
-import type { OrderTracker } from '../../src/helpers/OrderTracker';
 import { levelsAround, marketLevels, openPrice } from '../../src/helpers/orderLevels';
 import type { MarketOrderInput, Quote, Side } from '../../src/models/trading';
-import type { OrderPanel } from '../../src/pages/components/OrderPanel';
 import type { ConfirmationDetails } from '../../src/pages/components/TradeConfirmation';
+import { placeExpectingRejection } from '../../src/helpers/tradingSteps';
+import { MT5_CODE } from '../../src/pages/components/tradeRequests';
 
 /*
  * R1: real market orders with Stop Loss and Take Profit on the demo account. Each test skips while
@@ -22,9 +22,6 @@ import type { ConfirmationDetails } from '../../src/pages/components/TradeConfir
  * Written while every market was closed: the confirmation dialog, the order API response and the
  * MT5 rejection codes come from the web trader's bundle, not from a live run.
  */
-
-/** MT5 code the server answers for SL/TP too close to the market ("Invalid Stop loss or Take profit"). */
-const INVALID_STOPS = '10016';
 
 /** Asserts the confirmation dialog showed this order; notes it when One-Click Trading skipped it. */
 function expectConfirmation(
@@ -53,20 +50,6 @@ function expectFilledWithin(entry: number, side: Side, quotes: Quote[]): void {
   const tolerance = 2 * Math.max(...quotes.map((q) => q.ask - q.bid));
   expect(entry, 'entry price').toBeGreaterThanOrEqual(Math.min(...prices) - tolerance);
   expect(entry, 'entry price').toBeLessThanOrEqual(Math.max(...prices) + tolerance);
-}
-
-/**
- * Places an order that the server is expected to refuse. If it is accepted after all, the new
- * position is taken over so clean-up closes it, and the promise still resolves (failing the test).
- */
-async function placeExpectingRejection(
-  panel: OrderPanel,
-  orders: OrderTracker,
-  order: MarketOrderInput,
-): Promise<void> {
-  const before = await orders.positionIds();
-  await panel.placeMarketOrder(order);
-  await orders.newPosition(before, order);
 }
 
 test.describe(
@@ -233,12 +216,12 @@ test.describe(
         );
         const before = await orders.positionIds();
         await expect(
-          placeExpectingRejection(panel, orders, {
+          placeExpectingRejection(tradePage, orders, {
             side: 'BUY',
             volume: spec.minContractLotSize,
             stopLoss,
           }),
-        ).rejects.toMatchObject({ code: INVALID_STOPS });
+        ).rejects.toMatchObject({ code: MT5_CODE.INVALID_STOPS });
         expect(await orders.positionIds()).toEqual(before);
       });
 

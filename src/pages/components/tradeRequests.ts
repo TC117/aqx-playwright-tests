@@ -32,6 +32,14 @@ export const TRADE_API = {
   bulkDelete: '/api/trade/trade/v1/limit/bulk',
 } as const;
 
+/** MT5 codes the server answers for refused orders (from the web trader's bundle). */
+export const MT5_CODE = {
+  /** "Invalid price": an order price on the wrong side of, or too close to, the market. */
+  INVALID_PRICE: '10015',
+  /** "Invalid Stop loss or Take profit": SL/TP too close to the market. */
+  INVALID_STOPS: '10016',
+} as const;
+
 /** How long the UI may take to send a trade request, and then the server to answer it. */
 const REQUEST_TIMEOUT = 30_000;
 

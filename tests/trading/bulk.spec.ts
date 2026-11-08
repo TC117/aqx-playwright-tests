@@ -7,12 +7,11 @@ import {
   TRADING_NOT_ALLOWED_REASON,
 } from '../../src/config/env';
 import { test, expect } from '../../src/fixtures/test';
-import type { OrderTracker } from '../../src/helpers/OrderTracker';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
 import { offsetByPoints } from '../../src/helpers/numbers';
-import type { PendingOrderInput, Side } from '../../src/models/trading';
 import type { TradePage } from '../../src/pages/TradePage';
 import { TRADE_API } from '../../src/pages/components/tradeRequests';
+import { openPosition, placePendingOrder } from '../../src/helpers/tradingSteps';
 
 /**
  * Bulk close and bulk delete on the real demo account (R5).
@@ -24,27 +23,6 @@ import { TRADE_API } from '../../src/pages/components/tradeRequests';
  */
 
 const BUFFER_POINTS = 50;
-
-async function openPosition(
-  tradePage: TradePage,
-  orders: OrderTracker,
-  side: Side,
-  volume: number,
-): Promise<string> {
-  const before = await orders.positionIds();
-  await tradePage.orderPanel.placeMarketOrder({ side, volume });
-  return orders.newPosition(before, { side, volume });
-}
-
-async function placePending(
-  tradePage: TradePage,
-  orders: OrderTracker,
-  order: PendingOrderInput,
-): Promise<string> {
-  const before = await orders.snapshot();
-  await tradePage.orderPanel.placePendingOrder(order);
-  return orders.newPendingOrder(before, order);
-}
 
 /** Order Nos. the server holds, sorted. */
 async function accountItems(api: AqxApi): Promise<{ positions: string[]; pending: string[] }> {
@@ -133,13 +111,13 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
     const spec = await api.symbolDetail(symbol);
     const lot = spec.minContractLotSize;
     const positions = [
-      await openPosition(tradePage, orders, 'BUY', lot),
-      await openPosition(tradePage, orders, 'SELL', lot),
-      await openPosition(tradePage, orders, 'BUY', 2 * lot),
+      await openPosition(tradePage, orders, { side: 'BUY', volume: lot }),
+      await openPosition(tradePage, orders, { side: 'SELL', volume: lot }),
+      await openPosition(tradePage, orders, { side: 'BUY', volume: 2 * lot }),
     ];
     const { ask } = await tradePage.orderPanel.quote();
     const pending = [
-      await placePending(tradePage, orders, {
+      await placePendingOrder(tradePage, orders, {
         type: 'Limit',
         side: 'BUY',
         volume: lot,
@@ -194,26 +172,26 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
     const at = (price: number, n: number): number =>
       Number((price + n * distance).toFixed(spec.digits));
     const pending = [
-      await placePending(tradePage, orders, {
+      await placePendingOrder(tradePage, orders, {
         type: 'Limit',
         side: 'BUY',
         volume: lot,
         price: at(ask, -3),
       }),
-      await placePending(tradePage, orders, {
+      await placePendingOrder(tradePage, orders, {
         type: 'Limit',
         side: 'SELL',
         volume: lot,
         price: at(bid, 3),
       }),
-      await placePending(tradePage, orders, {
+      await placePendingOrder(tradePage, orders, {
         type: 'Stop',
         side: 'BUY',
         volume: lot,
         price: at(ask, 3),
       }),
     ];
-    const positions = [await openPosition(tradePage, orders, 'BUY', lot)];
+    const positions = [await openPosition(tradePage, orders, { side: 'BUY', volume: lot })];
     await tradePage.pendingOrders.open();
     await skipUnlessAccountHoldsOnly(api, { positions, pending });
 
@@ -246,8 +224,8 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
       // and one clear loser once the price has moved about two spreads (see `standing`).
       test.setTimeout(300_000);
       const lot = (await api.symbolDetail(symbol)).minContractLotSize;
-      const buy = await openPosition(tradePage, orders, 'BUY', lot);
-      const sell = await openPosition(tradePage, orders, 'SELL', lot);
+      const buy = await openPosition(tradePage, orders, { side: 'BUY', volume: lot });
+      const sell = await openPosition(tradePage, orders, { side: 'SELL', volume: lot });
       const positions = tradePage.openPositions;
       await positions.open();
 

@@ -1,7 +1,7 @@
-import type { Request } from '@playwright/test';
 import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env';
 import { test as base, expect } from '../../src/fixtures/test';
 import { skipUnlessMarketClosed } from '../../src/helpers/market';
+import { isPreferenceWrite } from '../../src/pages/components/OneClickTrading';
 
 /**
  * One-Click Trading as a setting (R2): the terms dialog, switching it on and off, what the order
@@ -40,9 +40,6 @@ const CONSEQUENCES = [
   "Click on a cell in the Price Ladder's Buy or Sell columns.",
   "Close/delete orders in the positions' module and price ladder.",
 ];
-
-const isPreferenceWrite = (r: Request): boolean =>
-  r.method() !== 'GET' && new URL(r.url()).pathname === '/api/user/setting/v1/preference';
 
 test.describe('One-Click Trading setting', { tag: ['@R2'] }, () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
