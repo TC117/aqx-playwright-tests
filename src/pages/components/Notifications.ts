@@ -50,7 +50,8 @@ const DETAIL_LABELS = [
  * and shows "No new notifications." when empty. Order items read e.g. "Position Closed | +18.00 |
  * EURUSD  |  Order No. 9000001 | BUY | 0.06 volume(s) | at | 1.1171 | 2026-11-05 07:00:00"; clicking
  * one opens the "Order Details" dialog. Also the toast shown after an action
- * (`notification-box-description`, from the app's test-id list; not seen live yet).
+ * (`notification-box-description`), e.g. "One-Click Trading activated." (live), "Position has been
+ * created." and "Order has been created." (with the order requests answered in the browser).
  * Opening a tab marks its items as read on the server.
  * Owner: records work (R6, R7).
  */

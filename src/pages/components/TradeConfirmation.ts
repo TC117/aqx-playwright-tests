@@ -6,8 +6,8 @@ export interface ConfirmationDetails {
   /** Order type badge as shown, e.g. `BUY` or `BUY LIMIT` (compare case-insensitively). */
   orderType: string;
   /**
-   * Value under each label, e.g. `{ Volume: '0.01', Units: '1,000', 'Stop Loss': '1.1050',
-   * 'Fill Policy': 'Fill or Kill', 'Est. Margin Required': '11.14 USD' }`. Rows without a value
+   * Value under each label, e.g. `{ Volume: '0.02', Units: '2,000', 'Stop Loss': '1.0988',
+   * 'Fill Policy': 'Fill or Kill', 'Est. Margin Required': '22.28 USD' }`. Rows without a value
    * (no Stop Loss, no expiry date) are not shown at all.
    */
   fields: Record<string, string>;
@@ -16,12 +16,13 @@ export interface ConfirmationDetails {
 /**
  * "Order Confirmation" dialog, shown after the place button while One-Click Trading is off.
  *
- * Not seen live yet: every market was closed while this was written, so the place button never
- * got enabled. The test ids, the title and the Confirm / Cancel buttons come from the web trader's
- * own bundle. `trade-confirmation-modal` is declared there but never rendered, so the dialog is
- * found through its Confirm button. Rows follow the order type: Volume, Units, Price (pending),
- * Stop Limit Price (Stop Limit), Stop Loss, Take Profit, Expiry (pending), Expiry Date (or
- * "Expiry Date & Time"), Fill Policy, then "Est. Margin Required".
+ * Verified with the market reported open (mocked) and the order requests answered in the browser
+ * (2026-11-08): title "Order Confirmation", `trade-confirmation-symbol`, `-order-type`, `-label`,
+ * `-value`, `-button-confirm` and `-button-close`. There is no `trade-confirmation-modal`, so the
+ * dialog is found through its Confirm button. Rows follow the order: Volume, Units, Price and
+ * Stop Limit Price (pending / Stop Limit), Stop Loss and Take Profit (when set), Expiry (pending),
+ * "Expiry Date" or "Expiry Date & Time" (the two "Specified" expiries), Fill Policy, then
+ * "Est. Margin Required" (e.g. `22.28 USD`).
  */
 export class TradeConfirmation {
   readonly title: Locator;
