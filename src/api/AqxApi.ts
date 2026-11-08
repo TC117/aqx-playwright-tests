@@ -93,6 +93,44 @@ export interface HistoryEntry {
   closeTime: number;
 }
 
+/**
+ * An open position of `/api/trade/order/v1`. Field names come from the web trader's table code
+ * and were confirmed by the table rendering fabricated items (the account had no positions).
+ * `orderType` 0 = BUY, 1 = SELL; `stopLoss` / `takeProfit` 0 = none; `fillPolicy` 0 FOK, 1 IOC,
+ * 2 RETURN.
+ */
+export interface ServerPosition {
+  orderId: string | number;
+  positionId: string | number;
+  symbol: string;
+  orderType: number;
+  lotSize: number;
+  openPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  profit: number;
+  fillPolicy: number;
+  [field: string]: unknown;
+}
+
+/**
+ * A pending order of `/api/trade/order/v1/pending` (same provenance as {@link ServerPosition}).
+ * `orderType` 2 BUY LIMIT, 3 SELL LIMIT, 4 BUY STOP, 5 SELL STOP, 8/9 STOP LIMIT; `tradeExpiry`
+ * e.g. `GTC`, `GTD`.
+ */
+export interface ServerPendingOrder {
+  orderId: string | number;
+  symbol: string;
+  orderType: number;
+  lotSize: number;
+  price: number;
+  stopLoss: number;
+  takeProfit: number;
+  tradeExpiry: string;
+  expiration: number | null;
+  [field: string]: unknown;
+}
+
 /** Market states that mean "no trading possible right now". */
 const CLOSED_STATES = new Set(['CLOSED', 'OFFQUOTES']);
 
@@ -162,13 +200,11 @@ export class AqxApi {
     return this.get('/api/trade/order/v1/counts');
   }
 
-  /** Raw open positions. The item shape is not typed yet: the account had none when recorded. */
-  openPositions(): Promise<Record<string, unknown>[]> {
+  openPositions(): Promise<ServerPosition[]> {
     return this.get('/api/trade/order/v1');
   }
 
-  /** Raw pending orders (shape not typed yet, see {@link openPositions}). */
-  pendingOrders(): Promise<Record<string, unknown>[]> {
+  pendingOrders(): Promise<ServerPendingOrder[]> {
     return this.get('/api/trade/order/v1/pending');
   }
 
