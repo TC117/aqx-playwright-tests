@@ -5,6 +5,8 @@ import { test, expect } from '../../src/fixtures/test';
 import { closeTo } from '../../src/helpers/numbers';
 import { TradePage } from '../../src/pages/TradePage';
 import {
+  HISTORY_ROW_LIMIT,
+  listedRows,
   toServerTime,
   waitForServerUtcOffset,
   type DateRangePreset,
@@ -98,6 +100,17 @@ test.describe('Trading records already on the account', () => {
         await records.openPositionsHistory();
         await records.selectDateRange('All');
       });
+
+      // The deposit is the oldest record. Once HISTORY_ROW_LIMIT newer ones exist, a table that
+      // stops at that limit cannot list it (TC-HIS-13, mocked, covers long histories).
+      const newer = history.filter((e) => e.closeTime > deposit!.closeTime).length;
+      const shown = await records.listedRowCount();
+      test.skip(
+        newer >= HISTORY_ROW_LIMIT &&
+          shown <= HISTORY_ROW_LIMIT &&
+          (await records.row(deposit!.positionId).count()) === 0,
+        `the deposit is below the ${shown} rows Positions History lists (${newer} newer records)`,
+      );
 
       const row = await records.readPosition(deposit!.positionId);
 
@@ -246,8 +259,14 @@ test.describe('Trading records already on the account', () => {
       await expect(tradePage.history.ordersAndDealsEmptyState).toBeVisible({
         visible: orders.length === 0,
       });
+      // Every order, or the first HISTORY_ROW_LIMIT of them when the table stops there.
+      const shown = await tradePage.history.listedRowCount();
+      expect(listedRows(orders.length), 'order rows').toContain(shown);
       expect((await tradePage.history.orderDealIds()).sort()).toEqual(
-        orders.map((o) => String(o.orderId)).sort(),
+        orders
+          .slice(0, shown)
+          .map((o) => String(o.orderId))
+          .sort(),
       );
     },
   );
@@ -304,10 +323,12 @@ test.describe('Trading records already on the account', () => {
           await expect(records.dateRangeButton).toHaveText(
             new RegExp(`^\\s*${expected.label.replace(' - ', '\\s+-\\s+')}\\s*$`),
           );
-          const inRange = history.filter(
-            (e) => e.closeTime >= expected.from && e.closeTime <= expected.to,
-          );
-          for (const entry of inRange) {
+          const inRange = history
+            .filter((e) => e.closeTime >= expected.from && e.closeTime <= expected.to)
+            .sort((a, b) => b.closeTime - a.closeTime);
+          // Every record in range, or the newest HISTORY_ROW_LIMIT when the table stops there.
+          const shown = await records.listedRowCount();
+          for (const entry of inRange.slice(0, shown)) {
             await expect(records.row(entry.positionId).first()).toBeVisible();
           }
           await expect(records.positionsEmptyState).toBeVisible({ visible: inRange.length === 0 });

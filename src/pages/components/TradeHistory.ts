@@ -150,6 +150,28 @@ export class TradeHistory {
     return { from: Number(params.get('from')), to: Number(params.get('to')) };
   }
 
+  /**
+   * Rows the open table lists once it stops adding any. Scrolls to the last row between reads, so
+   * a table that renders on scroll shows the rest. Compare with {@link listedRows}.
+   */
+  async listedRowCount(): Promise<number> {
+    let shown = -1;
+    await expect
+      .poll(
+        async () => {
+          const last = this.positionRows.last();
+          if (await last.count()) await last.scrollIntoViewIfNeeded();
+          const now = await this.positionRows.count();
+          const settled = now === shown;
+          shown = now;
+          return settled;
+        },
+        { message: 'the history table should stop adding rows', intervals: [500] },
+      )
+      .toBe(true);
+    return shown;
+  }
+
   /** Rows (of the open table) whose Order No. is `orderId`. */
   row(orderId: string): Locator {
     return this.positionRows.filter({

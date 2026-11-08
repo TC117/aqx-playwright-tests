@@ -600,20 +600,7 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
           await open();
           await history.selectDateRange('All');
           await expect(history.positionRows.first()).toBeVisible();
-          // Scroll to the end until no more rows appear, for a table that renders on scroll.
-          let shown = -1;
-          await expect
-            .poll(
-              async () => {
-                await history.positionRows.last().scrollIntoViewIfNeeded();
-                const now = await history.positionRows.count();
-                const settled = now === shown;
-                shown = now;
-                return settled;
-              },
-              { message: `${tab} should stop adding rows`, intervals: [500] },
-            )
-            .toBe(true);
+          const shown = await history.listedRowCount();
           test.info().annotations.push({
             type: 'records listed',
             description: `${tab}: ${shown} of ${count}`,
