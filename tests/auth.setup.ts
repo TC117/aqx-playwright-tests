@@ -80,7 +80,9 @@ setup('log in to the demo account and save the session', async ({ loginPage, pag
   // snapshot right away, while the password is still in the field; the fixture only clears it
   // before the snapshot taken at the end of a failed test.
   await expect(page).toHaveURL(/\/web\/trade/, { timeout: 30_000 });
-  await expect(page.getByTestId('symbol-overview-id').first()).not.toBeEmpty();
+  // The trade screen can take more than the default 10 s to fill in (seen on CI). The setup is
+  // never retried, and every logged-in test depends on it, so wait as long as for the URL.
+  await expect(page.getByTestId('symbol-overview-id').first()).not.toBeEmpty({ timeout: 30_000 });
 
   const { authorization } = (await authorizedRequest).headers();
   await page.context().storageState({ path: AUTH_FILE });
