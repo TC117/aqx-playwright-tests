@@ -1,6 +1,9 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { parseUiNumber } from '../../helpers/numbers';
 
+/** Shown in place of a figure until the account's figures have loaded (seen on CI). */
+const NOT_LOADED = /^\*+$/;
+
 /** Every figure of the account dropdown ("Account Information"), as numbers. */
 export interface AccountSummary {
   balance: number;
@@ -48,9 +51,9 @@ export class AccountInfo {
     marginLevel: number | null;
   }> {
     return {
-      equity: requireAmount(await this.equity.innerText(), 'header equity'),
-      profitLoss: requireAmount(await this.profitLoss.innerText(), 'header profit/loss'),
-      marginLevel: parseAmount(await this.marginLevel.innerText()),
+      equity: await readAmount(this.equity, 'header equity'),
+      profitLoss: await readAmount(this.profitLoss, 'header profit/loss'),
+      marginLevel: await readOptionalAmount(this.marginLevel, 'header margin level'),
     };
   }
 
@@ -58,17 +61,16 @@ export class AccountInfo {
   async summary(): Promise<AccountSummary> {
     await this.openDropdown();
     try {
-      const value = async (id: string) =>
-        (await this.dropdown.getByTestId(`account-info-${id}-value`).innerText()).trim();
+      const field = (id: string) => this.dropdown.getByTestId(`account-info-${id}-value`);
       return {
-        balance: requireAmount(await value('balance'), 'balance'),
-        equity: requireAmount(await value('equity'), 'equity'),
-        freeMargin: requireAmount(await value('free-margin'), 'free margin'),
-        margin: requireAmount(await value('margin'), 'margin used'),
-        profitLoss: requireAmount(await value('profit-loss'), 'profit/loss'),
-        marginLevel: parseAmount(await value('margin-level')),
-        stopOutLevel: parseAmount(await value('stop-out-level')),
-        marginCallLevel: parseAmount(await value('margin-call-level')),
+        balance: await readAmount(field('balance'), 'balance'),
+        equity: await readAmount(field('equity'), 'equity'),
+        freeMargin: await readAmount(field('free-margin'), 'free margin'),
+        margin: await readAmount(field('margin'), 'margin used'),
+        profitLoss: await readAmount(field('profit-loss'), 'profit/loss'),
+        marginLevel: await readOptionalAmount(field('margin-level'), 'margin level'),
+        stopOutLevel: await readOptionalAmount(field('stop-out-level'), 'stop out level'),
+        marginCallLevel: await readOptionalAmount(field('margin-call-level'), 'margin call level'),
       };
     } finally {
       await this.closeDropdown();
@@ -95,4 +97,16 @@ function requireAmount(text: string, what: string): number {
   const value = parseAmount(text);
   if (value === null) throw new Error(`Expected an amount for ${what}, got "${text}"`);
   return value;
+}
+
+/** Reads an amount once the UI shows one. */
+async function readAmount(field: Locator, what: string): Promise<number> {
+  await expect(field, `${what} should show an amount`).toHaveText(/\d/);
+  return requireAmount(await field.innerText(), what);
+}
+
+/** Reads a figure that may be empty or `--` (then null), once it has loaded. */
+async function readOptionalAmount(field: Locator, what: string): Promise<number | null> {
+  await expect(field, `${what} should have loaded`).not.toHaveText(NOT_LOADED);
+  return parseAmount(await field.innerText());
 }
