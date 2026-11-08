@@ -143,9 +143,21 @@ export async function pickCalendarDate(
   // The calendar opens in a layer outside the form.
   const calendar = page.locator('.react-calendar');
   await expect(calendar).toBeVisible();
+  await showCalendarMonth(calendar, clock);
+  await calendar.getByRole('button', { name: calendarDayLabel(clock), exact: true }).click();
+  await expect(dateInput).toHaveText(clock.date);
+}
+
+/**
+ * Moves an open date picker (react-calendar) to the month of `clock`. It opens on the input's
+ * current month, which can lie after the target (an order that already expires later) or before
+ * it (tomorrow is in the next month), so it is moved either way.
+ */
+export async function showCalendarMonth(
+  calendar: Locator,
+  clock: Pick<ServerClock, 'year' | 'month'>,
+): Promise<void> {
   const monthLabel = calendar.locator('.react-calendar__navigation__label');
-  // The calendar opens on the input's current month, which can lie after the target (an order
-  // that already expires later), so it is moved either way.
   const wanted = clock.year * 12 + clock.month - 1;
   const maxSteps = Math.abs(wanted - monthNumber(await monthLabel.innerText())) + 2;
   for (let i = 0; ; i++) {
@@ -157,8 +169,6 @@ export async function pickCalendarDate(
     await calendar.locator(`.react-calendar__navigation__${button}-button`).click();
     await expect(monthLabel).not.toHaveText(shown);
   }
-  await calendar.getByRole('button', { name: calendarDayLabel(clock), exact: true }).click();
-  await expect(dateInput).toHaveText(clock.date);
 }
 
 /**

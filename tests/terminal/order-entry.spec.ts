@@ -15,7 +15,11 @@ import {
   wrongSideMarketLevels,
 } from '../../src/helpers/orderLevels';
 import type { OrderType, PendingOrderType, Quote, Side } from '../../src/models/trading';
-import { calendarDayLabel, serverClock } from '../../src/pages/components/OrderPanel';
+import {
+  calendarDayLabel,
+  serverClock,
+  showCalendarMonth,
+} from '../../src/pages/components/OrderPanel';
 
 /*
  * Order entry without execution: what the order panel offers for each order type, its own
@@ -501,7 +505,9 @@ test.describe('R3 Pending order form', { tag: ['@R3'] }, () => {
       'past days are enabled',
     ).toEqual([]);
 
-    await calendar.getByRole('button', { name: calendarDayLabel(tomorrow) }).click();
+    // On a month's last day, tomorrow is only shown once the calendar moved to the next month.
+    await showCalendarMonth(calendar, tomorrow);
+    await calendar.getByRole('button', { name: calendarDayLabel(tomorrow), exact: true }).click();
     await expect(panel.expiryDate).toHaveText(tomorrow.date);
   });
 
