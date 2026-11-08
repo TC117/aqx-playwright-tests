@@ -5,7 +5,7 @@ import { test, expect } from '../../src/fixtures/test';
 import { parseUiNumber } from '../../src/helpers/numbers';
 import { TradePage } from '../../src/pages/TradePage';
 import {
-  listedRows,
+  HISTORY_ROW_LIMIT,
   toServerTime,
   waitForServerUtcOffset,
 } from '../../src/pages/components/TradeHistory';
@@ -577,12 +577,14 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
   );
 
   test(
-    'TC-HIS-13 Positions History and Orders & Deals with 75 records list them all or stop at the known limit',
+    'TC-HIS-13 Positions History and Orders & Deals with 75 records keep every record reachable',
     { tag: ['@R6'] },
     async ({ page, api }) => {
-      // The shared account's history grows with every trading run; this finds out whether the
-      // tables keep every record reachable. The result is noted on the test (annotation
-      // "records listed"); HISTORY_ROW_LIMIT in TradeHistory.ts is set from it.
+      test.fail(
+        true,
+        `Known issue: both history tables list only the newest ${HISTORY_ROW_LIMIT} records, also after scrolling, so older ones cannot be reached`,
+      );
+      // How many rows each table lists is noted on the test (annotation "records listed").
       const count = 75;
       const oldest = String(9_100_001);
       const { tradePage } = await openWithMockedRecords(page, api, (t) => manyRecords(t, count));
@@ -601,10 +603,9 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
             type: 'records listed',
             description: `${tab}: ${shown} of ${count}`,
           });
-          expect(listedRows(count), `${tab} rows`).toContain(shown);
-          await expect(history.row(oldest), 'the oldest record').toHaveCount(
-            shown === count ? 1 : 0,
-          );
+          // What the test design expects (TC-HIS-13): every returned row is reachable.
+          expect(shown, `${tab} rows`).toBe(count);
+          await expect(history.row(oldest), 'the oldest record').toHaveCount(1);
         });
       }
     },

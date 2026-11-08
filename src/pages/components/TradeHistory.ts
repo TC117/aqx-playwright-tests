@@ -45,9 +45,10 @@ const HISTORIES_API = '/api/order/v3/histories';
 const DEALS_API = '/api/trade/order/v1/deal/histories';
 
 /**
- * Row count the history tables may stop at. The Open Positions table renders at most 30 rows;
- * whether the history tables do too is what TC-HIS-13 (mocked) records, and it has not been seen
- * yet. Until it has, history checks accept either outcome (see {@link listedRows}).
+ * Row count the history tables stop at: like Open Positions, Positions History and Orders & Deals
+ * render at most 30 rows, also after scrolling (TC-HIS-13, mocked, seen 2026-11-08), so older
+ * records cannot be reached. The account's history grows with every trading run, so history
+ * checks only expect the newest rows; they also accept every row, for when this is fixed.
  */
 export const HISTORY_ROW_LIMIT = RENDERED_ROW_LIMIT;
 

@@ -78,7 +78,7 @@ How each fact was obtained:
 | Orders & Deals: one row per order with state FILLED / CANCELED / REJECTED / EXPIRED; deals expand under it as In / Out                                      | Mocked        |
 | Notification tabs are Positions, System and Information (kept 30 / 30 / 10 days); order items are "Position Created" / "Position Closed" with the Order No. | Live / Mocked |
 | Clicking an order notification opens "Order Details" (`/api/trade/order/v1/details?orderId=`)                                                               | Mocked        |
-| Not seen yet: whether the history tables list more than 30 rows. TC-HIS-13 (mocked) records it; the history checks accept both until then                   | Open          |
+| Positions History and Orders & Deals list at most 30 rows (the newest), also after scrolling; with 75 records the older 45 cannot be reached (TC-HIS-13)    | Mocked        |
 | Date-range presets: All, Last 7 / 30 / 90 days, This year, Last year, Custom                                                                                | Live          |
 
 ## Messages
@@ -125,3 +125,8 @@ How each fact was obtained:
 11. **The order form resets** to an empty Market order whenever One-Click Trading is switched in any
     session of the account, and when the symbol's specification loads. Anything typed is lost; the
     suite re-reads and refills its inputs.
+12. **Older history cannot be reached** (TC-HIS-13, mocked). Positions History and Orders & Deals
+    show only the newest 30 records, with no paging and nothing more after scrolling: with 75
+    records the oldest 45 are out of reach, the initial deposit among them once an account has
+    traded a little. Kept as an expected failure; the live history checks only expect the newest
+    30 rows.
