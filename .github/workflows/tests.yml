@@ -40,12 +40,31 @@ jobs:
     timeout-minutes: 60
     env:
       BASE_URL: https://aqxtrader.aquariux.com
-      # Repository secrets. Without them (e.g. pull requests from forks) logged-in tests skip.
+      # Repository secrets. The first step fails the run without them (see there).
       TRADER_USERNAME: ${{ secrets.TRADER_USERNAME }}
       TRADER_PASSWORD: ${{ secrets.TRADER_PASSWORD }}
       # Real orders only on a manual run with "trading" ticked.
       ALLOW_TRADING: ${{ inputs.trading && 'true' || 'false' }}
     steps:
+      - name: Check the account secrets
+        # Without the secrets every logged-in test skips, and a run of skips still passes. Fail
+        # instead, before installing anything. Pull requests from forks never get the secrets, so
+        # those only warn and run the tests that need no login.
+        env:
+          FROM_FORK: >-
+            ${{ github.event_name == 'pull_request' &&
+            github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          missing=""
+          if [ -z "$TRADER_USERNAME" ]; then missing="$missing TRADER_USERNAME"; fi
+          if [ -z "$TRADER_PASSWORD" ]; then missing="$missing TRADER_PASSWORD"; fi
+          if [ -z "$missing" ]; then exit 0; fi
+          if [ "$FROM_FORK" = "true" ]; then
+            echo "::warning title=No account secrets::Pull requests from forks get no secrets, so the logged-in tests skip."
+            exit 0
+          fi
+          echo "::error title=Missing account secrets::Not set:$missing. Every logged-in test would skip and the run would still pass. Add them under Settings > Secrets and variables > Actions."
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:

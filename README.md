@@ -156,8 +156,10 @@ Totals: smoke 1, terminal 42, mocked 44, trading 49 (136 tests).
 
 [`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs type check, lint and format,
 then `smoke`, `terminal` and `mocked` on every push to `main` and every pull request. Credentials
-come from the `TRADER_USERNAME` / `TRADER_PASSWORD` repository secrets; without them the
-logged-in tests skip. The `trading` project runs only on a manual run with "trading" ticked, which also sets `ALLOW_TRADING=true`. The
+come from the `TRADER_USERNAME` / `TRADER_PASSWORD` repository secrets. Without them the
+Playwright job fails at its first step, since every logged-in test would skip and the run would
+still pass; pull requests from forks, which never get secrets, only warn and run what needs no
+login. The `trading` project runs only on a manual run with "trading" ticked, which also sets `ALLOW_TRADING=true`. The
 Playwright jobs share one concurrency group because they share one demo account; the static
 checks are outside it, so they never wait for or get cancelled by another run. The HTML report
 is uploaded as an artifact.
