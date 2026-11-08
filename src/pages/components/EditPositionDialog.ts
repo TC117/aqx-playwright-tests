@@ -78,7 +78,7 @@ export class EditPositionDialog {
       matches: (r) =>
         r.method() === 'PATCH' &&
         new URL(r.url()).pathname === TRADE_API.modifyPosition &&
-        (r.postDataJSON() as { orderId?: string } | null)?.orderId === orderId,
+        String((r.postDataJSON() as { orderId?: unknown } | null)?.orderId) === orderId,
       errors: this.errors,
     });
     await expect(this.root).toBeHidden();

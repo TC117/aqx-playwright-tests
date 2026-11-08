@@ -167,7 +167,7 @@ export class OpenPositions {
       matches: (r) =>
         r.method() === 'PUT' &&
         new URL(r.url()).pathname === TRADE_API.closeOrDelete &&
-        (r.postDataJSON() as { orderId?: string } | null)?.orderId === orderId,
+        String((r.postDataJSON() as { orderId?: unknown } | null)?.orderId) === orderId,
       errors: dialog.errors,
       completeDialog: async () => {
         dialogShown = true;

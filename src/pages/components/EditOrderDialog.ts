@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { Expiry } from '../../models/trading';
 import { VALIDATION_TEXT } from './EditPositionDialog';
-import { calendarDayLabel, OrderPanel, serverClock, type ServerClock } from './OrderPanel';
+import { pickExpiry } from './OrderPanel';
 import { TradeConfirmation } from './TradeConfirmation';
 import { submitTradeRequest, TRADE_API } from './tradeRequests';
 
@@ -80,19 +80,8 @@ export class EditOrderDialog {
 
   /** Picks an expiry; for the "Specified" options `expiresAt` is entered in server time. */
   async selectExpiry(expiry: Expiry, expiresAt?: Date): Promise<void> {
-    if ((await this.expiry.innerText()).trim() !== expiry) {
-      await this.expiry.click();
-      // The open list follows the trigger, which also shows the current value.
-      await this.expiry.getByText(expiry, { exact: true }).last().click();
-      await expect(this.expiry).toHaveText(expiry);
-    }
-    if (!expiresAt) return;
-    if (expiry !== 'Specified Date' && expiry !== 'Specified Date and Time') {
-      throw new Error(`Expiry "${expiry}" does not take a date`);
-    }
-    const clock = serverClock(expiresAt, await new OrderPanel(this.page).serverTimeOffsetMs());
-    await this.pickDate(clock);
-    if (expiry === 'Specified Date and Time') await this.pickTime(clock);
+    const inputs = { dropdown: this.expiry, date: this.expiryDate, time: this.expiryTime };
+    await pickExpiry(this.page, inputs, expiry, expiresAt);
   }
 
   /**
@@ -107,7 +96,7 @@ export class EditOrderDialog {
       matches: (r) =>
         r.method() === 'PATCH' &&
         new URL(r.url()).pathname === TRADE_API.modifyPending &&
-        (r.postDataJSON() as { orderId?: string } | null)?.orderId === orderId,
+        String((r.postDataJSON() as { orderId?: unknown } | null)?.orderId) === orderId,
       errors: this.errors,
     });
     await expect(this.root).toBeHidden();
@@ -116,53 +105,5 @@ export class EditOrderDialog {
   async cancel(): Promise<void> {
     await this.cancelButton.click();
     await expect(this.root).toBeHidden();
-  }
-
-  private async pickDate(clock: ServerClock): Promise<void> {
-    const calendar = this.page.locator('.react-calendar');
-    await this.expiryDate.click();
-    await expect(calendar).toBeVisible();
-    const monthLabel = calendar.locator('.react-calendar__navigation__label');
-    const target = new Intl.DateTimeFormat('en-US', {
-      month: 'long',
-      year: 'numeric',
-      timeZone: 'UTC',
-    }).format(new Date(Date.UTC(clock.year, clock.month - 1, 1)));
-    for (let i = 0; !(await monthLabel.innerText()).includes(target); i++) {
-      if (i > 24) throw new Error(`The expiry calendar never reached ${target}`);
-      const shown = await monthLabel.innerText();
-      await calendar.locator('.react-calendar__navigation__next-button').click();
-      await expect(monthLabel).not.toHaveText(shown);
-    }
-    await calendar.getByRole('button', { name: calendarDayLabel(clock), exact: true }).click();
-    await expect(this.expiryDate).toHaveText(clock.date);
-  }
-
-  private async pickTime(clock: ServerClock): Promise<void> {
-    await this.expiryTime.click();
-    const hourLabel = this.page.getByText('Hour', { exact: true });
-    const minuteLabel = this.page.getByText('Minute', { exact: true });
-    const ok = this.page.getByRole('button', { name: 'OK', exact: true });
-    // Innermost element holding both columns and the OK button.
-    const picker = this.page
-      .locator('div')
-      .filter({ has: hourLabel })
-      .filter({ has: minuteLabel })
-      .filter({ has: ok })
-      .last();
-    await expect(picker).toBeVisible();
-    const pad = (n: number): string => String(n).padStart(2, '0');
-    for (const [label, other, value] of [
-      [hourLabel, minuteLabel, pad(clock.hour)],
-      [minuteLabel, hourLabel, pad(clock.minute)],
-    ] as const) {
-      // Each column holds its label and a dropdown of two-digit values.
-      const column = picker.locator('div').filter({ has: label }).filter({ hasNot: other }).first();
-      await column.locator('[tabindex="0"]').first().click();
-      await column.getByTestId('options').getByText(value, { exact: true }).click();
-      await expect(column.locator('[tabindex="0"]').first()).toHaveText(value);
-    }
-    await picker.getByRole('button', { name: 'OK', exact: true }).click();
-    await expect(this.expiryTime).toHaveText(clock.time);
   }
 }
