@@ -41,6 +41,8 @@ jobs:
       # Repository secrets. Without them (e.g. pull requests from forks) logged-in tests skip.
       TRADER_USERNAME: ${{ secrets.TRADER_USERNAME }}
       TRADER_PASSWORD: ${{ secrets.TRADER_PASSWORD }}
+      # Real orders only on a manual run with "trading" ticked.
+      ALLOW_TRADING: ${{ inputs.trading && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -17,10 +17,15 @@ export const env = {
   password: process.env.TRADER_PASSWORD ?? '',
   defaultSymbol: process.env.DEFAULT_SYMBOL?.trim() || 'EURUSD',
   isCI: Boolean(process.env.CI),
+  /** Real (demo) orders are only placed when this is explicitly `true`. */
+  allowTrading: process.env.ALLOW_TRADING?.trim().toLowerCase() === 'true',
 } as const;
 
 /** True when everything needed to log in to the demo account is configured. */
 export const hasCredentials = Boolean(env.baseUrl && env.username && env.password);
+
+export const TRADING_NOT_ALLOWED_REASON =
+  'Set ALLOW_TRADING=true to let this test place real orders on the demo account';
 
 export const MISSING_BASE_URL_REASON =
   'Set BASE_URL in .env.local to run tests against the web trader';

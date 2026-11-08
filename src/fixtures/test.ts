@@ -1,6 +1,11 @@
 import { test as base, expect } from '@playwright/test';
 import { AqxApi } from '../api/AqxApi';
-import { env, hasCredentials, MISSING_CREDENTIALS_REASON } from '../config/env';
+import {
+  env,
+  hasCredentials,
+  MISSING_CREDENTIALS_REASON,
+  TRADING_NOT_ALLOWED_REASON,
+} from '../config/env';
 import { OrderTracker } from '../helpers/OrderTracker';
 import { LoginPage } from '../pages/LoginPage';
 import { TradePage } from '../pages/TradePage';
@@ -42,7 +47,9 @@ export const test = base.extend<Fixtures>({
     await use(tradePage);
   },
 
-  orders: async ({ api, tradePage }, use) => {
+  orders: async ({ api, tradePage }, use, testInfo) => {
+    // Opt-in: a run only places orders when someone asked for it on purpose.
+    testInfo.skip(!env.allowTrading, TRADING_NOT_ALLOWED_REASON);
     // Safety guard: never place orders on anything but a demo account.
     const account = await api.account();
     expect(account.isDemo, `account ${account.accountId} must be a demo account`).toBe(true);
