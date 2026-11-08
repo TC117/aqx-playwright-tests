@@ -350,7 +350,7 @@ test.describe('R3 Pending order form', { tag: ['@R3'] }, () => {
     await panel.openTradeForm();
 
     await test.step('Market, Limit, Stop and Stop Limit, as the symbol spec says', async () => {
-      expect(await panel.dropdownOptions(panel.orderType)).toEqual(ORDER_TYPES);
+      await panel.expectDropdownOptions(panel.orderType, ORDER_TYPES);
       expect(spec.orderTypes.map((t) => ORDER_TYPE_LABEL[t])).toEqual(ORDER_TYPES);
     });
 
@@ -364,7 +364,7 @@ test.describe('R3 Pending order form', { tag: ['@R3'] }, () => {
         await expect(panel.stopLimitPrice).toBeVisible({ visible: type === 'Stop Limit' });
         await expect(panel.expiry).toBeVisible({ visible: type !== 'Market' });
         await expect(panel.fillPolicy).toHaveText(String(fillPolicies[0]));
-        expect(await panel.dropdownOptions(panel.fillPolicy)).toEqual(fillPolicies);
+        await panel.expectDropdownOptions(panel.fillPolicy, fillPolicies);
       });
     }
     // Seen on 2026-11-08 for EURUSD: Fill or Kill for Market, Return for every pending type.
@@ -391,7 +391,7 @@ test.describe('R3 Pending order form', { tag: ['@R3'] }, () => {
       await test.step(type, async () => {
         await panel.selectOrderType(type);
         await expect(panel.expiry).toHaveText('Good Till Canceled');
-        expect(await panel.dropdownOptions(panel.expiry)).toEqual(expected);
+        await panel.expectDropdownOptions(panel.expiry, expected);
       });
     }
   });

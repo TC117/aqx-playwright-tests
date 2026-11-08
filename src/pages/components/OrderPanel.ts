@@ -379,28 +379,23 @@ export class OrderPanel {
     return (await this.validation.allInnerTexts()).map((t) => t.trim());
   }
 
-  /** Options of one of the panel's dropdowns (Order Type, Fill Policy, Expiry), in order. */
-  async dropdownOptions(dropdown: Locator): Promise<string[]> {
+  /**
+   * Opens a dropdown (Order Type, Fill Policy or Expiry, in the order panel or the Edit Order
+   * dialog), checks that it lists exactly `expected`, in order, and closes it again.
+   */
+  async expectDropdownOptions(dropdown: Locator, expected: readonly string[]): Promise<void> {
     // While open, the dropdown holds its trigger followed by one entry per option.
     const entries = dropdown.locator('[tabindex="0"]');
     await dropdown.click();
-    // The list renders in steps; read it until two reads in a row agree.
-    let texts: string[] = [];
-    let previousLength = -1;
+    // Options can arrive late: until the symbol's details have loaded, Expiry lists only its
+    // default (seen on CI). So read it until it matches.
     await expect
-      .poll(
-        async () => {
-          texts = await entries.allInnerTexts();
-          const settled = texts.length > 1 && texts.length === previousLength;
-          previousLength = texts.length;
-          return settled;
-        },
-        { message: 'the dropdown should finish listing its options' },
-      )
-      .toBe(true);
+      .poll(async () => (await entries.allInnerTexts()).slice(1).map((t) => t.trim()), {
+        message: 'the dropdown should list exactly the expected options',
+      })
+      .toEqual(expected);
     await entries.first().click();
     await expect(entries).toHaveCount(1);
-    return texts.slice(1).map((t) => t.trim());
   }
 
   /**

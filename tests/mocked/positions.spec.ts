@@ -390,8 +390,7 @@ test.describe('Positions and pending orders rendered from mocked server data', (
       const dialog = await pending.openEdit(BUY_LIMIT.orderId);
 
       await test.step('expiry options', async () => {
-        const options = await tradePage.orderPanel.dropdownOptions(dialog.expiry);
-        expect(options).toEqual([
+        await tradePage.orderPanel.expectDropdownOptions(dialog.expiry, [
           'Good Till Canceled',
           'Good Till Day',
           'Specified Date and Time',
