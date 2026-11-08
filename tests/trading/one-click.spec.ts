@@ -16,14 +16,20 @@ const test = base.extend<{ oneClickOn: OneClickTrading }>({
   oneClickOn: async ({ tradePage, api, symbol, orders: _orders }, use) => {
     // Before switching anything on: the setting is shared by every test on the account.
     await skipUnlessMarketOpen(api, symbol);
-    await tradePage.oneClick.enable();
-    await use(tradePage.oneClick);
-    // Runs after failures too. A fresh page avoids whatever state a failed test left behind.
-    if (await api.isOneClickTradingEnabled()) {
-      await tradePage.open();
-      await tradePage.oneClick.disable();
+    try {
+      await tradePage.oneClick.enable();
+      await use(tradePage.oneClick);
+    } finally {
+      // Also when enable() failed after the server had saved the setting. The server's value
+      // decides, and a fresh page avoids whatever state a failed test left behind.
+      if (await api.isOneClickTradingEnabled()) {
+        await tradePage.open();
+        await tradePage.oneClick.disable();
+      }
+      expect(await api.isOneClickTradingEnabled(), 'One-Click Trading must be off again').toBe(
+        false,
+      );
     }
-    expect(await api.isOneClickTradingEnabled(), 'One-Click Trading must be off again').toBe(false);
   },
 });
 
@@ -98,8 +104,9 @@ test.describe('One-Click Trading on the real server', { tag: ['@R2', '@market-op
 
       await test.step(`click ${side} once`, async () => {
         await place(oneClickOn, volume);
-        await expect(tradePage.notifications.toast).toHaveText(SUCCESS);
-        await expect(page.getByTestId('trade-confirmation-button-confirm')).toBeHidden();
+        // Soft, so a failed check still lets the test take ownership of the position below.
+        await expect.soft(tradePage.notifications.toast).toHaveText(SUCCESS);
+        await expect.soft(page.getByTestId('trade-confirmation-button-confirm')).toBeHidden();
       });
 
       const quoteAfter = await oneClickOn.quote();
@@ -147,8 +154,8 @@ test.describe('One-Click Trading on the real server', { tag: ['@R2', '@market-op
 
       await orderPanel.placeMarketOrder(order);
 
-      expect(await confirmationSeen(), 'the confirmation dialog should not appear').toBe(false);
       const orderId = await orders.newPosition(before);
+      expect(await confirmationSeen(), 'the confirmation dialog should not appear').toBe(false);
       expect(await tradePage.openPositions.read(orderId)).toMatchObject({
         orderId,
         symbol,

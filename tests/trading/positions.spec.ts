@@ -6,6 +6,7 @@ import { skipUnlessMarketOpen } from '../../src/helpers/market';
 import { closeTo, offsetByPoints, roundTo } from '../../src/helpers/numbers';
 import type { MarketOrderInput, PositionRow } from '../../src/models/trading';
 import type { TradePage } from '../../src/pages/TradePage';
+import { OrderRejectedError } from '../../src/pages/components/tradeRequests';
 
 /**
  * Managing real positions and pending orders on the demo account (R4, and TC-PND-18 / 20 of R3).
@@ -18,6 +19,9 @@ import type { TradePage } from '../../src/pages/TradePage';
 
 /** Extra points on top of the stops level, so moving prices do not make a valid level invalid. */
 const BUFFER_POINTS = 50;
+
+/** MT5 code for SL/TP too close to the market ("Invalid Stop loss or Take profit"). */
+const INVALID_STOPS = '10016';
 
 interface Levels {
   spec: SymbolDetail;
@@ -209,12 +213,20 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
         await dialog.cancel();
       });
 
-      await test.step('SL inside the stops level is rejected', async () => {
+      await test.step('SL 5 points inside the stops level is refused by the server', async (step) => {
+        step.skip(
+          spec.stopsLevel < 10,
+          `stops level ${spec.stopsLevel} is too small for a stable check`,
+        );
         const dialog = await positions.openEdit(id);
         const { bid } = await tradePage.orderPanel.quote();
-        // One point below the Bid: right side, but closer than the stops level allows.
-        await dialog.fill({ stopLoss: offsetByPoints(bid, -1, spec.pointStep, spec.digits) });
-        await expect(dialog.submit(id)).rejects.toThrow();
+        // Right side of the Bid, but closer than the stops level allows (as in TC-MKT-10). The
+        // dialog does not check the stops level, so the request reaches the server.
+        const stopLoss = offsetByPoints(bid, -(spec.stopsLevel - 5), spec.pointStep, spec.digits);
+        await dialog.fill({ stopLoss });
+        const refused = dialog.submit(id);
+        await expect(refused).rejects.toBeInstanceOf(OrderRejectedError);
+        await expect(refused).rejects.toMatchObject({ code: INVALID_STOPS });
         await dialog.dismiss();
       });
 
@@ -282,10 +294,14 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
       const sellId = await openPosition(tradePage, orders, { side: 'SELL', volume });
       const positions = tradePage.openPositions;
 
-      await test.step('TC-POS-10 cancelling the close dialog keeps the position', async () => {
+      await test.step('TC-POS-10 cancelling the close dialog keeps the position', async (step) => {
+        // With One-Click Trading on, the close button closes at once, without a dialog.
+        step.skip(
+          await tradePage.oneClick.isEnabled(),
+          'One-Click Trading is on (another run switched it on), so there is no Close dialog',
+        );
         const row = positions.row(buyId);
         await row.getByTestId('asset-open-button-close').click();
-        // One-Click Trading would close at once; the account keeps it off between tests.
         await expect(positions.closeDialog.root).toContainText(buyId);
         await positions.closeDialog.cancel();
         expect(await positions.read(buyId)).toMatchObject({ volume });
@@ -393,7 +409,7 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
 
       expect(await serverPendingOrder(api, id)).toBeUndefined();
       const [order] = await tradePage.history.readOrdersAndDeals(id);
-      expect(order?.state).toMatch(/cancel/i);
+      expect(order).toMatchObject({ kind: 'order', orderId: id, state: 'CANCELED' });
     });
   });
 });

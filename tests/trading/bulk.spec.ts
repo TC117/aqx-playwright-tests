@@ -134,9 +134,9 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
     await tradePage.openPositions.open();
     await skipUnlessAccountHoldsOnly(api, { positions, pending });
 
+    // The positions stay owned: clean-up skips the ones that are gone and closes any left behind.
     const sent = nextBulkRequest(page, TRADE_API.bulkClose);
     await tradePage.bulk.closePositions('all');
-    for (const id of positions) orders.release(id);
 
     expect(await sent, 'the request should name every position').toEqual([...positions].sort());
     await expect(tradePage.openPositions.tab).toHaveText('Open Positions (0)');
@@ -199,7 +199,6 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
 
     const sent = nextBulkRequest(page, TRADE_API.bulkDelete);
     await tradePage.bulk.deleteAllPendingOrders();
-    for (const id of pending) orders.release(id);
 
     expect(await sent, 'the request should name every pending order').toEqual([...pending].sort());
     await expect(tradePage.pendingOrders.tab).toHaveText('Pending Orders (0)');
@@ -209,7 +208,7 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
     await test.step('each order is cancelled in Orders & Deals', async () => {
       for (const id of pending) {
         const [order] = await tradePage.history.readOrdersAndDeals(id);
-        expect(order?.state, `order ${id}`).toMatch(/cancel/i);
+        expect(order?.state, `order ${id}`).toBe('CANCELED');
       }
     });
 
@@ -248,7 +247,6 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
       await test.step('Profitable Positions', async () => {
         const sent = nextBulkRequest(page, TRADE_API.bulkClose);
         await tradePage.bulk.closePositions('profit');
-        orders.release(winner);
         expect(await sent).toEqual([winner]);
         await expect(positions.row(winner)).toHaveCount(0);
         await expect(positions.row(loser)).toHaveCount(1);
@@ -259,7 +257,6 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
         test.skip(Number((await positions.read(loser)).profit) >= 0, 'the loser turned profitable');
         const sent = nextBulkRequest(page, TRADE_API.bulkClose);
         await tradePage.bulk.closePositions('loss');
-        orders.release(loser);
         expect(await sent).toEqual([loser]);
         await expect(positions.emptyState).toBeVisible();
       });

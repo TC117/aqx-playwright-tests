@@ -101,13 +101,15 @@ test.describe(
         });
 
         const quoteAfter = await panel.quote();
+        // Owned before any check, so a failed check cannot leave the position on the account.
+        const orderId = await orders.newPosition(before);
 
         await test.step('the confirmation dialog showed the order', async () => {
           expectConfirmation(panel.lastConfirmation, symbol, order);
         });
 
         await test.step('the new position has the symbol, side, volume, SL, TP and fill price', async () => {
-          const position = await tradePage.openPositions.read(await orders.newPosition(before));
+          const position = await tradePage.openPositions.read(orderId);
           expect(position).toMatchObject({
             symbol,
             side,

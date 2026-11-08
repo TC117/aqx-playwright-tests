@@ -29,9 +29,10 @@ import type { ConfirmationDetails } from '../../src/pages/components/TradeConfir
  * is closed and owns the orders it creates (deleted again by the `orders` fixture). Prices are
  * computed from the live quote, well beyond the stops level, so the orders stay pending.
  *
- * Written while every market was closed: the confirmation dialog, the order API and the MT5
- * rejection codes come from the web trader's bundle. How the Pending Orders table words the
- * expiry is not known yet, so those checks accept the usual spellings.
+ * Written while every market was closed: the confirmation dialog and the order requests were seen
+ * with mocked responses (tests/mocked), the MT5 rejection codes come from the web trader's bundle.
+ * The Expiry column shows the option's label; the Expiry Date cells were checked with fabricated
+ * rows (see expectedExpiryDate).
  */
 
 /** MT5 code for an order price on the wrong side or too close to the market ("Invalid price"). */
@@ -45,12 +46,10 @@ const EXPIRIES: Expiry[] = [
 ];
 const PENDING_TYPES: PendingOrderType[] = ['Limit', 'Stop', 'Stop Limit'];
 
-/** Expiry column text for each option (table wording not seen yet). */
-const EXPIRY_IN_LIST: Record<Expiry, RegExp> = {
-  'Good Till Canceled': /^(good till cancell?ed|gtc)$/i,
-  'Good Till Day': /^(good till day|gtd|day)$/i,
-  'Specified Date': /^specified date$/i,
-  'Specified Date and Time': /^specified date and time$/i,
+/** Cases a TC-PND-25 combination also implements: pick a date (and time), see it listed. */
+const ALSO_COVERS: Partial<Record<Expiry, string>> = {
+  'Specified Date': 'TC-PND-24',
+  'Specified Date and Time': 'TC-PND-14',
 };
 
 /** The expiry moment the test asks for, or `undefined` for options without a date. */
@@ -61,26 +60,30 @@ function expiryMoment(expiry: Expiry, today: ServerClock, offsetMs: number): Dat
 }
 
 /**
- * What the Expiry Date column should show for each option, given the moment the test asked for.
- * Dates and times hold only digits, `-` and `:`, so they need no regex escaping.
+ * What the Expiry Date cell should show for each option, given the moment the test asked for. The
+ * table uses server time: `--` without an expiry, `YYYY-MM-DD` for Good Till Day and Specified
+ * Date, `YYYY-MM-DD HH:mm:ss` for Specified Date and Time (the web trader's formatter, checked
+ * with fabricated rows).
  */
 function expectedExpiryDate(
   expiry: Expiry,
   today: ServerClock,
   expiresAt: Date | undefined,
   offsetMs: number,
-): RegExp {
+): string {
   const at = expiresAt ? serverClock(expiresAt, offsetMs) : today;
   switch (expiry) {
     case 'Good Till Canceled':
-      return /^(--)?$/;
+      return '--';
     case 'Good Till Day':
-      // Expires at the end of the trading day on the server clock.
-      return new RegExp(today.date);
+      // TC-PND-13: expires at the end of today's trading day on the server clock. The date the
+      // server stores for a Day order has not been seen live yet.
+      return today.date;
     case 'Specified Date':
-      return new RegExp(at.date);
+      return at.date;
     case 'Specified Date and Time':
-      return new RegExp(`${at.date} ${at.time}`);
+      // The time picker sets whole minutes.
+      return `${at.date} ${at.time}:00`;
   }
 }
 
@@ -109,17 +112,34 @@ function requestedVolume(row: PendingOrderRow): number | null {
 }
 
 /**
- * Places an order that the server is expected to refuse. If it is accepted after all, the new
- * order is taken over so clean-up deletes it, and the promise still resolves (failing the test).
+ * Places an order that the server is expected to refuse. If it is accepted after all, whatever it
+ * created is taken over so clean-up removes it: the pending order, or the position when it filled
+ * at once. The promise then resolves, which fails the caller's `rejects` check.
  */
 async function placeExpectingRejection(
   panel: OrderPanel,
   orders: OrderTracker,
   order: PendingOrderInput,
 ): Promise<void> {
-  const before = await orders.pendingIds();
+  const pendingBefore = await orders.pendingIds();
+  const positionsBefore = await orders.positionIds();
   await panel.placePendingOrder(order);
-  await orders.newPendingOrder(before);
+  let placed = 0;
+  await expect
+    .poll(
+      async () => {
+        const opened = [...(await orders.positionIds())].filter((id) => !positionsBefore.has(id));
+        opened.forEach((id) => orders.ownPosition(id));
+        placed = [...(await orders.pendingIds())].filter((id) => !pendingBefore.has(id)).length;
+        return opened.length + placed;
+      },
+      {
+        message: 'the accepted order should be listed as a pending order or a position',
+        timeout: 20_000,
+      },
+    )
+    .toBeGreaterThan(0);
+  if (placed) await orders.newPendingOrder(pendingBefore);
 }
 
 test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () => {
@@ -166,8 +186,10 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
         ...levelsAround(side, executionPrice(prices), spec, spec.stopsLevel + 50),
       };
 
-      await test.step('place the order', async () => {
+      // Owned before any check, so a failed check cannot leave the order on the account.
+      const orderId = await test.step('place the order', async () => {
         await panel.placePendingOrder(order);
+        return orders.newPendingOrder(before);
       });
 
       await test.step('the confirmation dialog showed the order', async () => {
@@ -175,16 +197,17 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
       });
 
       await test.step('Pending Orders lists it with type, volume, price, SL, TP and GTC', async () => {
-        const row = await tradePage.pendingOrders.read(await orders.newPendingOrder(before));
+        const row = await tradePage.pendingOrders.read(orderId);
         expect(row).toMatchObject({
           symbol,
           type: pendingTypeText(side, type),
           price: order.price,
           stopLoss: order.stopLoss,
           takeProfit: order.takeProfit,
+          expiry: 'Good Till Canceled',
+          expiryDate: '--',
         });
         expect(requestedVolume(row)).toBe(order.volume);
-        expect(row.expiry).toMatch(EXPIRY_IN_LIST['Good Till Canceled']);
       });
 
       // A pending order holds no margin until it fills (account used serially, see §10).
@@ -194,7 +217,9 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
 
   for (const type of PENDING_TYPES) {
     for (const expiry of EXPIRIES) {
-      test(`TC-PND-25 BUY ${type} with expiry "${expiry}" keeps that expiry`, async ({
+      const ids = ['TC-PND-25', ALSO_COVERS[expiry]].filter(Boolean).join(' ');
+
+      test(`${ids} BUY ${type} with expiry "${expiry}" keeps that expiry`, async ({
         tradePage,
         api,
         orders,
@@ -225,12 +250,14 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
         };
 
         await panel.placePendingOrder(order);
+        const orderId = await orders.newPendingOrder(before);
         expectConfirmation(panel.lastConfirmation, order);
 
-        const row = await tradePage.pendingOrders.read(await orders.newPendingOrder(before));
-        expect(row.type).toBe(pendingTypeText('BUY', type));
-        expect(row.expiry).toMatch(EXPIRY_IN_LIST[expiry]);
-        expect(row.expiryDate).toMatch(expectedExpiryDate(expiry, today, expiresAt, offset));
+        expect(await tradePage.pendingOrders.read(orderId)).toMatchObject({
+          type: pendingTypeText('BUY', type),
+          expiry,
+          expiryDate: expectedExpiryDate(expiry, today, expiresAt, offset),
+        });
       });
     }
   }
@@ -339,4 +366,63 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
       expect(row.price).toBe(outside.price);
     });
   });
+
+  test(
+    'TC-PND-17 A Buy Limit expiring at a specified time leaves Pending Orders then and shows EXPIRED',
+    { tag: '@slow' },
+    async ({ tradePage, api, orders, symbol }) => {
+      test.setTimeout(8 * 60_000);
+      const spec = await api.symbolDetail(symbol);
+      const panel = tradePage.orderPanel;
+      await panel.openTradeForm();
+      const offset = await panel.serverTimeOffsetMs();
+      // 3 to 4 minutes ahead, on a whole minute (the time picker has no seconds).
+      const expiresAt = new Date(Math.ceil((Date.now() + 3 * 60_000) / 60_000) * 60_000);
+      const expiry = 'Specified Date and Time';
+      const order: PendingOrderInput = {
+        type: 'Limit',
+        side: 'BUY',
+        volume: spec.minContractLotSize,
+        // Far below the market, so it cannot fill before it expires.
+        ...pendingPrices('Limit', 'BUY', await panel.quote(), spec, spec.stopsLevel + 500),
+        expiry,
+        expiresAt,
+      };
+      const before = await orders.pendingIds();
+      await panel.placePendingOrder(order);
+      const orderId = await orders.newPendingOrder(before);
+      expect(await tradePage.pendingOrders.read(orderId)).toMatchObject({
+        expiry,
+        expiryDate: expectedExpiryDate(expiry, serverClock(new Date(), offset), expiresAt, offset),
+      });
+
+      await test.step('the server drops it once the expiry time has passed', async () => {
+        await expect
+          .poll(
+            async () => (await api.pendingOrders()).some((p) => String(p.orderId) === orderId),
+            {
+              message: `pending order ${orderId} should expire`,
+              timeout: expiresAt.getTime() - Date.now() + 2 * 60_000,
+              intervals: [5_000],
+            },
+          )
+          .toBe(false);
+        // Not early; 30 s allow for the difference between this machine's and the server's clock.
+        expect(Date.now()).toBeGreaterThanOrEqual(expiresAt.getTime() - 30_000);
+      });
+
+      await test.step('Pending Orders drops it and Orders & Deals shows it EXPIRED', async () => {
+        await tradePage.pendingOrders.open();
+        await expect(tradePage.pendingOrders.row(orderId)).toHaveCount(0);
+        const [record] = await tradePage.history.readOrdersAndDeals(orderId);
+        expect(record).toMatchObject({
+          kind: 'order',
+          orderId,
+          type: 'Buy Limit',
+          volumeText: `${order.volume} / 0`,
+          state: 'EXPIRED',
+        });
+      });
+    },
+  );
 });

@@ -20,8 +20,9 @@ import type {
  * Each test skips while its market is closed. The balance check assumes no other test trades on
  * the account at the same time (the suite runs with one worker).
  *
- * Not verified live yet (the market was closed while this was written): toast text, the shape
- * of real deal rows and what the details dialog shows for a position closed in two steps.
+ * Not verified live yet (the market was closed while this was written): the shape of real deal
+ * rows and what the details dialog shows for a position closed in two steps. Toast texts and the
+ * Orders & Deals states (FILLED, CANCELED, upper-cased by CSS) were seen with mocked responses.
  */
 
 /** Distance of SL/TP and the pending price from the market, on top of the stops level. */
@@ -82,8 +83,8 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
           stopLoss: offsetByPoints(quote.bid, -distance, spec.pointStep, spec.digits),
           takeProfit: offsetByPoints(quote.bid, distance, spec.pointStep, spec.digits),
         });
-        // Toast text not seen live yet; a public source quotes "Position has been created."
-        expect(await notifications.lastToast()).toMatch(/created|placed|success/i);
+        // Soft, so a wrong toast still lets the test take ownership of the position below.
+        await expect.soft(notifications.toast.last()).toHaveText('Position has been created.');
         return orders.newPosition(positionsBefore);
       });
 
@@ -164,7 +165,7 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
             stopLoss: opened.stopLoss,
             takeProfit: opened.takeProfit,
           });
-          expect(openingOrder!.state).toMatch(/^filled$/i);
+          expect(openingOrder!.state).toBe('FILLED');
           expect(
             openingDeals.map((d) => [d.type, parseUiNumber(d.volumeText), d.entryPrice]),
           ).toEqual([['In', volume, opened.entryPrice]]);
@@ -173,7 +174,7 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
           for (const closingId of newOrders.filter((o) => o !== id)) {
             const [closingOrder, ...out] = await history.readOrdersAndDeals(closingId);
             expect(closingOrder).toMatchObject({ kind: 'order', symbol, type: 'Sell' });
-            expect(closingOrder!.state).toMatch(/^filled$/i);
+            expect(closingOrder!.state).toBe('FILLED');
             expect(out.map((d) => d.type)).toEqual(['Out']);
             closingDeals.push(...out);
           }
@@ -240,54 +241,84 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
   );
 
   test(
-    'TC-DTL-02 A cancelled pending order shows CANCELED in Orders & Deals and never reaches Positions History',
+    'TC-DTL-02 A pending order placed, modified and deleted keeps its Order No. and ends CANCELED with its last values',
     { tag: ['@R6', '@R7'] },
     async ({ tradePage, api, orders, symbol }) => {
       await skipUnlessMarketOpen(api, symbol);
       const spec = await api.symbolDetail(symbol);
-      const { orderPanel, pendingOrders, history } = tradePage;
+      const { orderPanel, pendingOrders, history, notifications } = tradePage;
       const volume = spec.minContractLotSize;
       const quote = await orderPanel.quote();
-      // A Buy Limit far below the market, so it cannot fill before it is deleted.
-      const limitPrice = offsetByPoints(
-        quote.ask,
-        -(spec.stopsLevel + 5 * BUFFER_POINTS),
-        spec.pointStep,
-        spec.digits,
-      );
+      const move = (price: number, points: number): number =>
+        offsetByPoints(price, points, spec.pointStep, spec.digits);
+      const gap = spec.stopsLevel + BUFFER_POINTS;
+      // Buy Limit prices far below the market, so the order cannot fill before it is deleted.
+      const placedPrice = move(quote.ask, -5 * gap);
+      const newPrice = move(quote.ask, -6 * gap);
+      const changes = {
+        price: newPrice,
+        stopLoss: move(newPrice, -gap),
+        takeProfit: move(newPrice, gap),
+      };
 
-      const before = await orders.pendingIds();
-      await orderPanel.placePendingOrder({
-        type: 'Limit',
-        side: 'BUY',
-        volume,
-        price: limitPrice,
-        expiry: 'Good Till Canceled',
+      const id = await test.step('place a Buy Limit: listed in Pending Orders', async () => {
+        const before = await orders.pendingIds();
+        await orderPanel.placePendingOrder({
+          type: 'Limit',
+          side: 'BUY',
+          volume,
+          price: placedPrice,
+          expiry: 'Good Till Canceled',
+        });
+        // Soft, so a wrong toast still lets the test take ownership of the order below.
+        await expect.soft(notifications.toast.last()).toHaveText('Order has been created.');
+        const orderId = await orders.newPendingOrder(before);
+        expect(await pendingOrders.read(orderId)).toMatchObject({
+          orderId,
+          symbol,
+          type: 'BUY LIMIT',
+          price: placedPrice,
+          stopLoss: null,
+          takeProfit: null,
+        });
+        return orderId;
       });
-      const id = await orders.newPendingOrder(before);
-      await pendingOrders.delete(id);
-      orders.release(id);
 
-      const rows = await history.readOrdersAndDeals(id);
-      // No deals: nothing was filled.
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
-        kind: 'order',
-        orderId: id,
-        symbol,
-        type: 'Buy Limit',
-        volumeText: `${volume} / 0`,
-        fillPolicy: 'Return',
-        entryPrice: limitPrice,
-        profit: null,
+      await test.step('modify price, SL and TP: same Order No. with the new values', async () => {
+        await pendingOrders.edit(id, changes);
+        expect(await pendingOrders.read(id)).toMatchObject({ orderId: id, ...changes });
       });
-      expect(rows[0]!.state).toMatch(/^cancell?ed$/i);
 
-      await history.openPositionsHistory();
-      // "All" keeps the initial deposit in range, proving the list has loaded.
-      await history.selectDateRange('All');
-      await expect(history.positionRows.first()).toBeVisible();
-      await expect(history.row(id)).toHaveCount(0);
+      await test.step('delete it', async () => {
+        await pendingOrders.delete(id);
+        orders.release(id);
+      });
+
+      await test.step('Orders & Deals: one CANCELED order with the last values and no deals', async () => {
+        const rows = await history.readOrdersAndDeals(id);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          kind: 'order',
+          orderId: id,
+          symbol,
+          type: 'Buy Limit',
+          state: 'CANCELED',
+          volumeText: `${volume} / 0`,
+          fillPolicy: 'Return',
+          entryPrice: changes.price,
+          stopLoss: changes.stopLoss,
+          takeProfit: changes.takeProfit,
+          profit: null,
+        });
+      });
+
+      await test.step('never in Positions History', async () => {
+        await history.openPositionsHistory();
+        // "All" keeps the initial deposit in range, proving the list has loaded.
+        await history.selectDateRange('All');
+        await expect(history.positionRows.first()).toBeVisible();
+        await expect(history.row(id)).toHaveCount(0);
+      });
     },
   );
 });
