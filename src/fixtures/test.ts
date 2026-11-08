@@ -39,7 +39,16 @@ const MAX_ITEMS_PER_TEST = 5;
 /** Playwright `test` with page objects available as fixtures. Import `test` from here in specs. */
 export const test = base.extend<Fixtures>({
   loginPage: async ({ page }, use) => {
-    await use(new LoginPage(page));
+    const loginPage = new LoginPage(page);
+    await use(loginPage);
+    // After a timeout the test body keeps running in the background; stop it entering the
+    // password from now on.
+    loginPage.close();
+    // A test with errors gets a snapshot of the page, taken when the browser closes, and the
+    // setup project's `screenshot: 'off'` does not turn it off. Empty password fields first,
+    // whatever the outcome (an expected failure is snapshotted too). This also runs after a
+    // timeout, when the test's own code never gets the chance.
+    await loginPage.clearPassword().catch(() => {});
   },
 
   symbol: [env.defaultSymbol, { option: true }],

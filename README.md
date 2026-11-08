@@ -82,6 +82,11 @@ Without credentials every logged-in test skips with a clear reason. Trading test
 Filter by requirement or kind with tags, e.g. `npx playwright test --grep @R4` or
 `--grep @market-open`.
 
+UI mode (`npm run test:ui`) and any `--trace` other than `off` record traces, and a trace of the
+login would contain the password. There the setup never logs in: it reuses the saved session
+while the server accepts it, and otherwise fails and asks you to run
+`npx playwright test --project=setup` without tracing first.
+
 ## Coverage
 
 Counts of tests per requirement and project (a test can serve two requirements). `terminal` and
@@ -132,7 +137,15 @@ Totals: smoke 1, terminal 42, mocked 44, trading 49 (136 tests).
   and `mocked` retry once on CI.
 - **Failure evidence without secrets.** Failed tests keep a trace, screenshot and video locally.
   CI keeps only screenshots and videos, because a trace records request headers (the bearer
-  token); the login step keeps no evidence at all.
+  token). The login step keeps no trace, screenshot or video, and keeps the password out of the
+  HTML report and the console too:
+  - It sets the password with `evaluate()`. `fill()` and the keyboard APIs print the typed text
+    in the report's step titles and in error logs.
+  - The `loginPage` fixture empties the field before the page snapshot Playwright attaches at
+    the end of a failed test, also after a timeout. `screenshot: 'off'` does not turn that
+    snapshot off. The setup checks the URL, not the login form, because a failing locator
+    assertion takes its own snapshot at once.
+  - It never logs in while a trace is recorded (see [Running tests](#running-tests)).
 - **Locators.** The app's own `data-testid` attributes first, then roles and text scoped to a
   container. No generated CSS classes, no XPath for elements, no `force` clicks.
 

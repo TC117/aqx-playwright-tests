@@ -43,6 +43,18 @@ function ensureStorageStateFile(): void {
   fs.writeFileSync(AUTH_FILE, JSON.stringify({ cookies: [], origins: [] }));
 }
 
+const TRACING_REASON =
+  'Tracing is on (UI mode or --trace) and there is no saved session that still works. ' +
+  'Logging in now would put the password in the trace: run ' +
+  'npx playwright test --project=setup without tracing first, then try again.';
+
+/** True when this run records a trace. UI mode and `--trace` turn it on over the config. */
+function traceIsOn(): boolean {
+  const trace = setup.info().project.use.trace;
+  const mode = typeof trace === 'object' ? trace.mode : trace;
+  return mode !== undefined && mode !== 'off';
+}
+
 setup('log in to the demo account and save the session', async ({ loginPage, page }) => {
   ensureStorageStateFile();
   setup.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
@@ -51,6 +63,8 @@ setup('log in to the demo account and save the session', async ({ loginPage, pag
     await savedSessionStillWorks(),
     'Reusing the saved session: the server still accepts it',
   );
+  // Fail rather than skip, so the logged-in projects do not run without a session.
+  expect(traceIsOn(), TRACING_REASON).toBe(false);
 
   // The trade page's first API call carries the bearer header the API client reuses.
   const authorizedRequest = page.waitForRequest(
@@ -62,7 +76,9 @@ setup('log in to the demo account and save the session', async ({ loginPage, pag
   // Throws with the server's reason if the credentials are rejected.
   await loginPage.login(env.username, env.password);
 
-  // Check the URL rather than the password input: that input's failure log prints the typed password.
+  // Check the URL, not the login form. A failing locator assertion on the form would take a page
+  // snapshot right away, while the password is still in the field; the fixture only clears it
+  // before the snapshot taken at the end of a failed test.
   await expect(page).toHaveURL(/\/web\/trade/, { timeout: 30_000 });
   await expect(page.getByTestId('symbol-overview-id').first()).not.toBeEmpty();
 

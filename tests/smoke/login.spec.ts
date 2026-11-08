@@ -20,19 +20,21 @@ test.describe('Login page', { tag: '@smoke' }, () => {
     await expect(loginPage.passwordInput).toBeVisible();
     await expect(loginPage.logInButton).toBeDisabled();
 
+    // The password goes in and out through the same helpers the login setup uses, so this also
+    // checks that the form notices a password set by script.
     await test.step('both fields filled: LOG IN is enabled', async () => {
       await loginPage.accountIdInput.fill(DUMMY_ACCOUNT_ID);
-      await loginPage.passwordInput.fill(DUMMY_PASSWORD);
+      await loginPage.enterPassword(DUMMY_PASSWORD);
       await expect(loginPage.logInButton).toBeEnabled();
     });
 
     await test.step('password cleared: LOG IN is disabled again', async () => {
-      await loginPage.passwordInput.clear();
+      await loginPage.clearPassword();
       await expect(loginPage.logInButton).toBeDisabled();
     });
 
     await test.step('account ID cleared instead: LOG IN is disabled again', async () => {
-      await loginPage.passwordInput.fill(DUMMY_PASSWORD);
+      await loginPage.enterPassword(DUMMY_PASSWORD);
       await expect(loginPage.logInButton).toBeEnabled();
       await loginPage.accountIdInput.clear();
       await expect(loginPage.logInButton).toBeDisabled();
