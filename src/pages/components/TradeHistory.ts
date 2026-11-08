@@ -29,6 +29,16 @@ export interface OrderDealRecord extends OrderDealRow {
 
 type Cells = Record<string, string>;
 
+type HistoryTab = 'positions' | 'ordersAndDeals';
+
+/** A history tab, the list request it sends when opened, and what only its table shows. */
+interface TabParts {
+  tab: Locator;
+  ownHeader: string;
+  api: string;
+  emptyState: Locator;
+}
+
 const HISTORIES_API = '/api/order/v3/histories';
 const DEALS_API = '/api/trade/order/v1/deal/histories';
 
@@ -61,6 +71,8 @@ export class TradeHistory {
   readonly dateRangeButton: Locator;
   readonly dateRangeMenu: Locator;
 
+  private readonly tabs: Record<HistoryTab, TabParts>;
+
   constructor(protected readonly page: Page) {
     this.positionsHistoryTab = page.getByTestId('tab-asset-order-type-history-positions-history');
     this.ordersAndDealsTab = page.getByTestId('tab-asset-order-type-history-orders-and-deals');
@@ -72,18 +84,30 @@ export class TradeHistory {
       .getByRole('button')
       .filter({ has: page.getByTestId('orders-date-picker-icon-calendar') });
     this.dateRangeMenu = page.getByTestId('orders-date-picker-dropdown');
+    this.tabs = {
+      positions: {
+        tab: this.positionsHistoryTab,
+        ownHeader: 'Close Price',
+        api: HISTORIES_API,
+        emptyState: this.positionsEmptyState,
+      },
+      ordersAndDeals: {
+        tab: this.ordersAndDealsTab,
+        ownHeader: 'State',
+        api: DEALS_API,
+        emptyState: this.ordersAndDealsEmptyState,
+      },
+    };
   }
 
   /** Opens Positions History and waits until the server's answer is rendered. */
   async openPositionsHistory(): Promise<void> {
-    await this.openTab(this.positionsHistoryTab, 'Close Price', HISTORIES_API);
-    await expect(this.positionRows.first().or(this.positionsEmptyState)).toBeVisible();
+    await this.openTab('positions');
   }
 
   /** Opens Orders & Deals and waits until the server's answer is rendered. */
   async openOrdersAndDeals(): Promise<void> {
-    await this.openTab(this.ordersAndDealsTab, 'State', DEALS_API);
-    await expect(this.positionRows.first().or(this.ordersAndDealsEmptyState)).toBeVisible();
+    await this.openTab('ordersAndDeals');
   }
 
   /** Header texts of the open history table, without the unnamed expand/share columns. */
@@ -129,9 +153,12 @@ export class TradeHistory {
 
   /** Every Positions History row of one position (one per partial or full close). */
   async readPositionRows(orderId: string): Promise<PositionHistoryRecord[]> {
-    await this.openPositionsHistory();
     const rows = this.row(orderId);
-    await expect(rows.first(), `Positions History should list Order No. ${orderId}`).toBeVisible();
+    await this.openUntilListed(
+      'positions',
+      rows.first(),
+      `Positions History should list Order No. ${orderId}`,
+    );
     const cells = await Promise.all((await rows.all()).map((r) => readCells(r)));
     return cells.map(toPositionRecord);
   }
@@ -154,11 +181,14 @@ export class TradeHistory {
    * its own Order No. (find it with {@link orderDealIds} before and after the close).
    */
   async readOrdersAndDeals(orderId: string): Promise<OrderDealRecord[]> {
-    await this.openOrdersAndDeals();
     const orderRow = this.row(orderId).and(
       this.page.locator('[data-row-id]:not([data-row-id*="."])'),
     );
-    await expect(orderRow, `Orders & Deals should list Order No. ${orderId}`).toBeVisible();
+    await this.openUntilListed(
+      'ordersAndDeals',
+      orderRow,
+      `Orders & Deals should list Order No. ${orderId}`,
+    );
     const rowId = (await orderRow.getAttribute('data-row-id')) ?? '';
     const expand = orderRow.getByTestId('asset-history-position-list-item-expand');
     const dealRows = this.positionRows.and(this.page.locator(`[data-row-id^="${rowId}."]`));
@@ -173,17 +203,35 @@ export class TradeHistory {
   }
 
   /**
-   * Clicks a history tab unless it is already open (then the UI does not refetch), waiting for
-   * its list request and for a column only that tab has.
+   * Clicks a history tab unless it is already open, waiting for its list request, a column only
+   * that tab has, and the rows or the empty state. The UI fetches a list only when its tab is
+   * opened, so with `refetch` an open tab is left for the other one and opened again.
    */
-  private async openTab(tab: Locator, ownHeader: string, api: string): Promise<void> {
+  private async openTab(name: HistoryTab, refetch = false): Promise<void> {
+    const { tab, ownHeader, api, emptyState } = this.tabs[name];
     const header = this.columnHeaders.filter({ hasText: new RegExp(`^${ownHeader}$`) });
+    if (refetch && (await header.isVisible())) {
+      await this.openTab(name === 'positions' ? 'ordersAndDeals' : 'positions');
+    }
     if (!(await header.isVisible())) {
       const response = this.page.waitForResponse((r) => isHistoryRequest(r, api));
       await tab.click();
       await response;
     }
     await expect(header).toBeVisible();
+    await expect(this.positionRows.first().or(emptyState)).toBeVisible();
+  }
+
+  /**
+   * Opens a history tab until `row` is shown. The list the tab loaded can predate the action the
+   * test just took (an order filled, closed or deleted a moment ago), so it is fetched again.
+   */
+  private async openUntilListed(name: HistoryTab, row: Locator, message: string): Promise<void> {
+    let attempt = 0;
+    await expect(async () => {
+      await this.openTab(name, attempt++ > 0);
+      await expect(row, message).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
   }
 }
 
