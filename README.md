@@ -26,8 +26,10 @@ TypeScript. They run against the live demo platform on a demo account with virtu
   traceability, automation strategy, assumptions). Test titles start with the case id, e.g.
   `TC-MKT-04 …`.
 - [docs/platform-notes.md](docs/platform-notes.md): what was learned about the platform (API,
-  rules, exact messages) and **findings worth a second look**, such as a double click sending two
-  One-Click orders.
+  rules, exact messages).
+- [docs/defects.md](docs/defects.md): **10 defects** found on the demo (1 High, 4 Medium,
+  5 Low), each with its status (confirmed live or mocked only), steps to reproduce, a screenshot and the test
+  that shows it, plus observations that still need confirmation.
 
 ## How the suite is organised
 
@@ -70,14 +72,15 @@ Without credentials every logged-in test skips with a clear reason. Trading test
 
 ## Running tests
 
-| Command                                                       | What it does                                            |
-| ------------------------------------------------------------- | ------------------------------------------------------- |
-| `npm run test:safe`                                           | smoke + terminal + mocked: never places an order        |
-| `npm run test:trading`                                        | Real demo orders (they skip while the market is closed) |
-| `npm test`                                                    | Every project                                           |
-| `npm run test:headed`                                         | Visible browser                                         |
-| `npm run report`                                              | Open the last HTML report                               |
-| `npm run typecheck` / `npm run lint` / `npm run format:check` | Static checks                                           |
+| Command                                                       | What it does                                                                       |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `npm run test:safe`                                           | smoke + terminal + mocked: never places an order                                   |
+| `npm run test:trading`                                        | Real demo orders (they skip while the market is closed)                            |
+| `npm test`                                                    | Every project                                                                      |
+| `npm run test:headed`                                         | Visible browser                                                                    |
+| `npm run report`                                              | Open the last HTML report                                                          |
+| `npm run defects:screenshots`                                 | Retake the screenshots in docs/defects/ (needs the saved session; places no order) |
+| `npm run typecheck` / `npm run lint` / `npm run format:check` | Static checks                                                                      |
 
 Filter by requirement or kind with tags, e.g. `npx playwright test --grep @R4` or
 `--grep @market-open`.

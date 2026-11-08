@@ -1,8 +1,8 @@
 # AQX Trader demo – platform notes
 
 What was learned about the web trader while building the suite (2026-11-06 to 2026-11-08). It
-answers most of the open questions in [testcase-final.md §11](testcase-final.md#11-open-questions)
-and records behaviour worth a second look.
+answers most of the open questions in [testcase-final.md §11](testcase-final.md#11-open-questions).
+Defects are in [defects.md](defects.md).
 
 How each fact was obtained:
 
@@ -99,34 +99,7 @@ How each fact was obtained:
 | Rejection `MT4_1004`                                            | "Insufficient balance"                                                                               |
 | Failed bulk request                                             | "Order action failed"                                                                                |
 
-## Findings worth a second look
+## Defects
 
-1. **Double click sends two One-Click orders** (TC-OCT-08, mocked). While the first order is
-   unanswered the BUY button stays enabled with no busy state; a second click sends a second
-   order. On a slow network this could open duplicate positions. Kept as an expected failure.
-2. **No time-out for an unanswered order.** An order request that never gets an answer shows
-   nothing for at least 70 s.
-3. **HTTP 200 with an error code counts as success.** The client judges order replies by HTTP
-   status only, so a 200 reply carrying an error `code` shows "Position has been created.".
-4. **Close volume below the minimum or off the step is not validated in the browser** (0.005 and
-   0.015 enable CONFIRM); only the server can refuse it.
-5. **Stops level is not validated in the browser.** An SL 8–10 points from the price gets no
-   message although the points field says "Min: 50"; neither is the side of a pending price (a Buy
-   Limit above the Ask) or the stop/limit relation of a Stop Limit. The server has to refuse them.
-   A pending price of 0 is accepted as 0.0000 without a message.
-6. **Bulk buttons give no feedback when the list is empty.**
-7. **Margin Level shows 0.00 % with no margin used** (a level of "--" would be expected).
-8. **Number formats differ between columns:** commission uses price digits ("-0.4200"), swap two
-   decimals, and a swap of 0 shows "--".
-9. **Volume is changed without telling the user.** Off-step values are cut to the step (0.015 →
-   0.01) and values above the maximum are capped (101 → 100).
-10. **Trade Volume is not refreshed when the side changes:** it keeps the price of the side that
-    was selected when the volume was typed. Est. Margin always uses the Ask, also for a Sell.
-11. **The order form resets** to an empty Market order whenever One-Click Trading is switched in any
-    session of the account, and when the symbol's specification loads. Anything typed is lost; the
-    suite re-reads and refills its inputs.
-12. **Older history cannot be reached** (TC-HIS-13, mocked). Positions History and Orders & Deals
-    show only the newest 30 records, with no paging and nothing more after scrolling: with 75
-    records the oldest 45 are out of reach, the initial deposit among them once an account has
-    traded a little. Kept as an expected failure; the live history checks only expect the newest
-    30 rows.
+Defects, with their status, severity and steps to reproduce, are in [defects.md](defects.md).
+Observations that were not reproduced are listed there under "Needs confirmation".
