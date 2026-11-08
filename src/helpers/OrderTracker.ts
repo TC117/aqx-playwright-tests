@@ -28,16 +28,22 @@ export class OrderTracker {
 
   /** Waits until exactly one position not in `before` is listed, and takes ownership of it. */
   async newPosition(before: Set<string>): Promise<string> {
-    const id = await this.waitForOneNew(before, () => this.positionIds(), 'open position');
-    this.positions.add(id);
-    return id;
+    return this.waitForOneNew(
+      before,
+      () => this.positionIds(),
+      (id) => this.positions.add(id),
+      'open position',
+    );
   }
 
   /** Waits until exactly one pending order not in `before` is listed, and takes ownership of it. */
   async newPendingOrder(before: Set<string>): Promise<string> {
-    const id = await this.waitForOneNew(before, () => this.pendingIds(), 'pending order');
-    this.pending.add(id);
-    return id;
+    return this.waitForOneNew(
+      before,
+      () => this.pendingIds(),
+      (id) => this.pending.add(id),
+      'pending order',
+    );
   }
 
   /** Takes ownership of a position the test learned about another way (e.g. a filled order). */
@@ -51,33 +57,65 @@ export class OrderTracker {
     this.pending.delete(orderId);
   }
 
-  /** Closes owned positions and deletes owned pending orders that are still listed. */
+  /**
+   * Closes owned positions and deletes owned pending orders that are still listed. Keeps going
+   * after a failure, so one stuck item does not leave the others behind.
+   */
   async cleanUp(): Promise<void> {
+    if (!this.positions.size && !this.pending.size) return;
     const errors: string[] = [];
-    if (this.positions.size) {
-      const open = await this.positionIds();
-      for (const id of this.positions) {
-        if (!open.has(id)) continue;
-        await this.tradePage.openPositions
-          .close(id)
-          .catch((e: Error) => errors.push(`close ${id}: ${e.message}`));
-      }
-    }
-    if (this.pending.size) {
-      const listed = await this.pendingIds();
-      for (const id of this.pending) {
-        if (!listed.has(id)) continue;
-        await this.tradePage.pendingOrders
-          .delete(id)
-          .catch((e: Error) => errors.push(`delete ${id}: ${e.message}`));
-      }
-    }
+    // A failed test may have left a dialog open over the tables: start from a fresh screen.
+    await this.tradePage.open().catch((e: Error) => errors.push(`reload: ${e.message}`));
+    await this.removeListed(
+      'position',
+      this.positions,
+      () => this.positionIds(),
+      (id) => this.tradePage.openPositions.close(id),
+      errors,
+    );
+    await this.removeListed(
+      'pending order',
+      this.pending,
+      () => this.pendingIds(),
+      (id) => this.tradePage.pendingOrders.delete(id),
+      errors,
+    );
     if (errors.length) throw new Error(`Clean-up left orders behind:\n${errors.join('\n')}`);
   }
 
+  private async removeListed(
+    what: string,
+    owned: Set<string>,
+    list: () => Promise<Set<string>>,
+    remove: (orderId: string) => Promise<void>,
+    errors: string[],
+  ): Promise<void> {
+    if (!owned.size) return;
+    let listed: Set<string>;
+    try {
+      listed = await list();
+    } catch (e) {
+      errors.push(`listing ${what}s: ${(e as Error).message}`);
+      return;
+    }
+    for (const id of owned) {
+      if (!listed.has(id)) continue;
+      try {
+        await remove(id);
+      } catch (e) {
+        errors.push(`${what} ${id}: ${(e as Error).message}`);
+      }
+    }
+  }
+
+  /**
+   * Polls until exactly one id not in `before` is listed. Every new id seen is owned at once, so
+   * if the UI created more than one (e.g. a double submit), clean-up still removes all of them.
+   */
   private async waitForOneNew(
     before: Set<string>,
     list: () => Promise<Set<string>>,
+    own: (orderId: string) => void,
     what: string,
   ): Promise<string> {
     let added: string[] = [];
@@ -85,6 +123,7 @@ export class OrderTracker {
       .poll(
         async () => {
           added = [...(await list())].filter((id) => !before.has(id));
+          added.forEach(own);
           return added.length;
         },
         { message: `exactly one new ${what} should appear`, timeout: 20_000 },
