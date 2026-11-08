@@ -318,7 +318,7 @@ test.describe('Positions and pending orders rendered from mocked server data', (
   });
 
   test.describe('Pending Orders', { tag: ['@R3', '@mocked'] }, () => {
-    test('TC-PND-01 each field of the server pending orders is shown in the table', async ({
+    test('TC-PND-01 (display part) each field of the server pending orders is shown in the table', async ({
       page,
     }) => {
       const { tradePage, blocked } = await openWith(page, {
@@ -456,7 +456,7 @@ test.describe('Positions and pending orders rendered from mocked server data', (
             await expect(bulk.closeDialog).toContainText(line);
           }
           await expect(page.getByTestId(`bulk-close-modal-button-submit-${kind}`)).toHaveText(
-            /confirm/i,
+            'Confirm',
           );
           await bulk.cancel();
         });
@@ -500,8 +500,13 @@ test.describe('Positions and pending orders rendered from mocked server data', (
       profit: [BUY],
       loss: [SELL],
     };
+    const CASE: Record<BulkCloseKind, string> = {
+      all: 'TC-BLK-01',
+      profit: 'TC-BLK-02',
+      loss: 'TC-BLK-03',
+    };
     for (const kind of Object.keys(SELECTION) as BulkCloseKind[]) {
-      test(`TC-BLK-02/03 "${BULK_CLOSE_OPTIONS[kind]}" sends exactly the matching positions`, async ({
+      test(`${CASE[kind]} (request part) "${BULK_CLOSE_OPTIONS[kind]}" sends exactly the matching positions`, async ({
         page,
       }) => {
         const { tradePage, blocked } = await openWith(page, {
@@ -529,7 +534,9 @@ test.describe('Positions and pending orders rendered from mocked server data', (
       });
     }
 
-    test('TC-BLK-05 "All Orders" sends every listed pending order', async ({ page }) => {
+    test('TC-BLK-05 (request part) "All Orders" sends every listed pending order', async ({
+      page,
+    }) => {
       const { tradePage, blocked } = await openWith(page, {
         positions: [],
         pending: [BUY_LIMIT, SELL_STOP],

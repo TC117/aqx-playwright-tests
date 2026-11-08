@@ -161,7 +161,7 @@ test.describe('R1 Placing market orders (mocked open market)', { tag: ['@R1', '@
     ]);
   });
 
-  test('TC-MKT-13 Cancel in the confirmation dialog sends nothing', async ({
+  test('TC-MKT-13 The confirmation dialog shows the Buy with its SL and TP, and Cancel sends nothing', async ({
     tradePage,
     orderRequests,
     api,
@@ -170,47 +170,30 @@ test.describe('R1 Placing market orders (mocked open market)', { tag: ['@R1', '@
     const spec = await api.symbolDetail(symbol);
     const panel = tradePage.orderPanel;
     await panel.openTradeForm();
-    await panel.fillMarketOrder({
-      side: 'SELL',
+    const order: MarketOrderInput = {
+      side: 'BUY',
       volume: VOLUME,
-      ...marketLevels('SELL', await panel.quote(), spec, spec.stopsLevel + 100),
+      ...marketLevels('BUY', await panel.quote(), spec, spec.stopsLevel + 100),
+    };
+    await panel.fillMarketOrder(order);
+
+    await test.step('the dialog shows the order and nothing is sent yet', async () => {
+      await panel.placeButton.click();
+      const shown = await panel.confirmation.read();
+      await expect(panel.confirmation.title).toBeVisible();
+      expect(shown).toMatchObject({ symbol, orderType: 'BUY' });
+      expect(confirmationNumbers(shown)).toMatchObject({
+        Volume: VOLUME,
+        'Stop Loss': order.stopLoss,
+        'Take Profit': order.takeProfit,
+      });
+      expect(orderRequests, 'nothing is sent before confirming').toEqual([]);
     });
 
-    await panel.placeButton.click();
-    await expect(panel.confirmation.title).toBeVisible();
-    await expect(panel.confirmation.orderType).toHaveText('SELL');
-    await panel.confirmation.cancel();
-
-    expect(orderRequests).toEqual([]);
-  });
-
-  test.describe('with One-Click Trading on', () => {
-    test.use({ oneClickSetting: true });
-
-    test('TC-OCT-04 placeMarketOrder sends the order at once, without a confirmation', async ({
-      tradePage,
-      orderRequests,
-      api,
-      symbol,
-    }) => {
-      const spec = await api.symbolDetail(symbol);
-      const panel = tradePage.orderPanel;
-      await panel.openTradeForm();
-      const levels = marketLevels('SELL', await panel.quote(), spec, spec.stopsLevel + 100);
-
-      await panel.placeMarketOrder({ side: 'SELL', volume: VOLUME, ...levels });
-
-      expect(panel.lastConfirmation).toBeNull();
-      expect(orderRequests.map(bodyOf)).toEqual([
-        {
-          orderType: ORDER_TYPE.SELL,
-          symbol,
-          lotSize: VOLUME,
-          fillPolicy: FILL_OR_KILL,
-          indicate: 'PRICE',
-          ...levels,
-        },
-      ]);
+    await test.step('Cancel closes it and sends nothing', async () => {
+      await panel.confirmation.cancel();
+      await expect(panel.confirmation.title).toBeHidden();
+      expect(orderRequests, 'nothing is sent after cancelling').toEqual([]);
     });
   });
 });
@@ -339,83 +322,95 @@ test.describe('R3 Placing pending orders (mocked open market)', { tag: ['@R3', '
   }
 });
 
-test.describe('Refused orders (mocked open market)', { tag: ['@R1', '@R3', '@mocked'] }, () => {
-  test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
-  test.use({ oneClickSetting: false });
+/*
+ * Each refusal or failure here comes from the mock, not the server, so these check only how the
+ * UI reports it (the mocked part of TC-HIS-04 / TC-ERR-05). Whether the server refuses a given
+ * order is checked in tests/trading.
+ */
+test.describe(
+  'Refused orders (mocked open market)',
+  { tag: ['@R1', '@R3', '@R6', '@mocked'] },
+  () => {
+    test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
+    test.use({ oneClickSetting: false });
 
-  test.describe('SL/TP refused by the server', () => {
-    test.use({
-      orderReply: { kind: 'error', status: 400, code: '10016', message: 'Invalid stops' },
-    });
-
-    test('TC-MKT-10 placeMarketOrder rejects with the server code and the app shows its message', async ({
-      tradePage,
-      orderRequests,
-      api,
-      symbol,
-    }) => {
-      const spec = await api.symbolDetail(symbol);
-      const { orderPanel: panel, notifications } = tradePage;
-      await panel.openTradeForm();
-      const order: MarketOrderInput = {
-        side: 'BUY',
-        volume: VOLUME,
-        ...marketLevels('BUY', await panel.quote(), spec, spec.stopsLevel + 100),
-      };
-
-      const placing = panel.placeMarketOrder(order);
-
-      await expect(placing).rejects.toBeInstanceOf(OrderRejectedError);
-      await expect(placing).rejects.toMatchObject({ code: '10016', httpStatus: 400 });
-      await expect(notifications.toast).toHaveText('Invalid Stop loss or Take profit');
-      expect(orderRequests).toHaveLength(1);
-    });
-  });
-
-  test.describe('price refused by the server', () => {
-    test.use({
-      orderReply: { kind: 'error', status: 400, code: '10015', message: 'Invalid price' },
-    });
-
-    test('TC-PND-09 placePendingOrder rejects with the server code and the app shows its message', async ({
-      tradePage,
-      orderRequests,
-      api,
-      symbol,
-    }) => {
-      const spec = await api.symbolDetail(symbol);
-      const { orderPanel: panel, notifications } = tradePage;
-      await panel.openTradeForm();
-      const order: PendingOrderInput = {
-        type: 'Limit',
-        side: 'SELL',
-        volume: VOLUME,
-        ...pendingPrices('Limit', 'SELL', await panel.quote(), spec, spec.stopsLevel + 100),
-      };
-
-      const placing = panel.placePendingOrder(order);
-
-      await expect(placing).rejects.toMatchObject({ code: '10015', httpStatus: 400 });
-      await expect(notifications.toast).toHaveText('Invalid Price submitted.');
-      expect(orderRequests).toHaveLength(1);
-    });
-  });
-
-  test.describe('no answer at all', () => {
-    test.use({ orderReply: { kind: 'network-failure' } });
-
-    test('TC-ERR-05 placeMarketOrder rejects when the order request fails', async ({
-      tradePage,
-      orderRequests,
-    }) => {
-      const { orderPanel: panel, notifications } = tradePage;
-
-      await expect(panel.placeMarketOrder({ side: 'SELL', volume: VOLUME })).rejects.toMatchObject({
-        code: 'NO_RESPONSE',
-        httpStatus: 0,
+    test.describe('SL/TP refused by the server', () => {
+      test.use({
+        orderReply: { kind: 'error', status: 400, code: '10016', message: 'Invalid stops' },
       });
-      await expect(notifications.toast).toHaveText('Network error. Please try again later.');
-      expect(orderRequests).toHaveLength(1);
+
+      test('TC-HIS-04 An invalid-stops refusal (10016) rejects placeMarketOrder and the app names the reason', async ({
+        tradePage,
+        orderRequests,
+        api,
+        symbol,
+      }) => {
+        const spec = await api.symbolDetail(symbol);
+        const { orderPanel: panel, notifications } = tradePage;
+        await panel.openTradeForm();
+        const order: MarketOrderInput = {
+          side: 'BUY',
+          volume: VOLUME,
+          ...marketLevels('BUY', await panel.quote(), spec, spec.stopsLevel + 100),
+        };
+
+        const placing = panel.placeMarketOrder(order);
+
+        await expect(placing).rejects.toBeInstanceOf(OrderRejectedError);
+        await expect(placing).rejects.toMatchObject({ code: '10016', httpStatus: 400 });
+        await expect(notifications.toast).toHaveText('Invalid Stop loss or Take profit');
+        expect(orderRequests).toHaveLength(1);
+      });
     });
-  });
-});
+
+    test.describe('price refused by the server', () => {
+      test.use({
+        orderReply: { kind: 'error', status: 400, code: '10015', message: 'Invalid price' },
+      });
+
+      test('TC-HIS-04 An invalid-price refusal (10015) rejects placePendingOrder and the app names the reason', async ({
+        tradePage,
+        orderRequests,
+        api,
+        symbol,
+      }) => {
+        const spec = await api.symbolDetail(symbol);
+        const { orderPanel: panel, notifications } = tradePage;
+        await panel.openTradeForm();
+        const order: PendingOrderInput = {
+          type: 'Limit',
+          side: 'SELL',
+          volume: VOLUME,
+          ...pendingPrices('Limit', 'SELL', await panel.quote(), spec, spec.stopsLevel + 100),
+        };
+
+        const placing = panel.placePendingOrder(order);
+
+        await expect(placing).rejects.toBeInstanceOf(OrderRejectedError);
+        await expect(placing).rejects.toMatchObject({ code: '10015', httpStatus: 400 });
+        await expect(notifications.toast).toHaveText('Invalid Price submitted.');
+        expect(orderRequests).toHaveLength(1);
+      });
+    });
+
+    test.describe('no answer at all', () => {
+      test.use({ orderReply: { kind: 'network-failure' } });
+
+      test('TC-ERR-05 placeMarketOrder rejects when the order request fails', async ({
+        tradePage,
+        orderRequests,
+      }) => {
+        const { orderPanel: panel, notifications } = tradePage;
+
+        await expect(
+          panel.placeMarketOrder({ side: 'SELL', volume: VOLUME }),
+        ).rejects.toMatchObject({
+          code: 'NO_RESPONSE',
+          httpStatus: 0,
+        });
+        await expect(notifications.toast).toHaveText('Network error. Please try again later.');
+        expect(orderRequests).toHaveLength(1);
+      });
+    });
+  },
+);

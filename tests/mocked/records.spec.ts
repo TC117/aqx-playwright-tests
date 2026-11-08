@@ -10,7 +10,8 @@ import { toServerTime, waitForServerUtcOffset } from '../../src/pages/components
  * One position's lifecycle rendered from fabricated server data: Buy 0.10 EURUSD opened, 0.04
  * closed, the remaining 0.06 closed, plus a Buy Limit that was cancelled. Only GET reads are
  * replaced (Positions History, Orders & Deals, order notifications and the order details the
- * notification opens); every write still goes to the real server.
+ * notification opens). These tests send no order; any order write would be aborted anyway, as in
+ * every mocked test (`mockedWriteGuard` in src/fixtures/test.ts).
  *
  * Schemas: history entries are the real BALANCE entry of the account with the trade fields
  * overridden; Orders & Deals and notification shapes were read from the app's JavaScript and
@@ -352,8 +353,8 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
           // Orders carry no P/L; their deals do.
           profit: null,
           openDate: toServerTime(OPENED, offset),
+          state: 'FILLED',
         });
-        expect(openingOrder!.state).toMatch(/^filled$/i);
         expect(inDeal).toMatchObject({
           kind: 'deal',
           orderId: POSITION.orderId,
@@ -381,8 +382,8 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
             entryPrice: close.price,
             profit: null,
             openDate: toServerTime(close.at, offset),
+            state: 'FILLED',
           });
-          expect(closingOrder!.state).toMatch(/^filled$/i);
           expect(outDeal).toMatchObject({ kind: 'deal', orderId: close.orderId, type: 'Out' });
 
           // R7: the deal and the Positions History row of this close agree.
@@ -425,8 +426,8 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
         entryPrice: CANCELLED_LIMIT.price,
         fillPolicy: 'Return',
         profit: null,
+        state: 'CANCELED',
       });
-      expect(rows[0]!.state).toMatch(/^canceled$/i);
       await expect(history.row(CANCELLED_LIMIT.orderId)).toHaveCount(1);
 
       await history.openPositionsHistory();
@@ -485,6 +486,14 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
       await notifications.openTab('order');
       const details = await notifications.openOrderDetails(notifications.listItems.first());
 
+      test.info().annotations.push({
+        type: 'issue',
+        description:
+          'Order Details shows Units "0" for a close whose Positions History row shows 6,000, ' +
+          'although both are rendered from the same record here. Not confirmed on real data: the ' +
+          'details response is a fabricated history entry, and the dialog may read a field the ' +
+          'real details response has. Check with a real closed position.',
+      });
       expect(details).toEqual({
         title: 'Position Closed',
         symbol: lastClose.symbol,
@@ -494,8 +503,8 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
           'Closed Time': lastClose.closeDate,
           'Order No.': lastClose.orderId,
           Volume: String(closedVolume(lastClose.volumeText)),
-          // Finding: the dialog shows 0 units for a record whose history row shows 6,000.
-          Units: expect.any(String),
+          // What the dialog shows today; the history row says 6,000 (see the 'issue' annotation).
+          Units: '0',
           'Profit/Loss': `+${lastClose.profit!.toFixed(2)}`,
           'ROI%': '--',
           'Entry Price': String(lastClose.entryPrice),

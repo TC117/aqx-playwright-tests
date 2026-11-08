@@ -267,9 +267,10 @@ test.describe('R1 Market order form', { tag: ['@R1'] }, () => {
     );
   });
 
+  // No test case covers Trade Details on its own; these are the pre-trade part of TC-MKT-04 / 05.
   const detailsCase: Record<Side, string> = { BUY: 'TC-MKT-04', SELL: 'TC-MKT-05' };
   for (const side of ['BUY', 'SELL'] as const) {
-    test(`${detailsCase[side]} Trade Details of a ${side} with SL and TP follow the symbol spec and the account leverage`, async ({
+    test(`${detailsCase[side]} (pre-trade part) Trade Details of a ${side} with SL and TP follow the symbol spec and the account leverage`, async ({
       tradePage,
       api,
       symbol,
@@ -338,7 +339,8 @@ test.describe('R1 Market order form', { tag: ['@R1'] }, () => {
 test.describe('R3 Pending order form', { tag: ['@R3'] }, () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
 
-  test('TC-PND-01 Order Type offers Market, Limit, Stop and Stop Limit, as the symbol spec says', async ({
+  // The form side of TC-PND-25 (every pending type with every expiry): what is offered for each.
+  test('TC-PND-25 (form part) Order Type offers the symbol order types, each with its own price fields and fill policy', async ({
     tradePage,
     api,
     symbol,
@@ -347,18 +349,10 @@ test.describe('R3 Pending order form', { tag: ['@R3'] }, () => {
     const panel = tradePage.orderPanel;
     await panel.openTradeForm();
 
-    expect(await panel.dropdownOptions(panel.orderType)).toEqual(ORDER_TYPES);
-    expect(spec.orderTypes.map((t) => ORDER_TYPE_LABEL[t])).toEqual(ORDER_TYPES);
-  });
-
-  test('TC-PND-05 Each order type shows its own price fields and the fill policy from the symbol spec', async ({
-    tradePage,
-    api,
-    symbol,
-  }) => {
-    const spec = await symbolRules(api, symbol);
-    const panel = tradePage.orderPanel;
-    await panel.openTradeForm();
+    await test.step('Market, Limit, Stop and Stop Limit, as the symbol spec says', async () => {
+      expect(await panel.dropdownOptions(panel.orderType)).toEqual(ORDER_TYPES);
+      expect(spec.orderTypes.map((t) => ORDER_TYPE_LABEL[t])).toEqual(ORDER_TYPES);
+    });
 
     for (const type of ORDER_TYPES) {
       await test.step(type, async () => {
@@ -377,7 +371,7 @@ test.describe('R3 Pending order form', { tag: ['@R3'] }, () => {
     expect(spec.tradeFillPolicy.marketFillPolicy).toEqual([0]);
   });
 
-  test('TC-PND-25 Expiry offers exactly the symbol expiry types for every pending type', async ({
+  test('TC-PND-25 (form part) Expiry offers exactly the symbol expiry types for every pending type', async ({
     tradePage,
     api,
     symbol,

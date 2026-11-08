@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env';
 import { test, expect } from '../../src/fixtures/test';
 
@@ -62,6 +62,28 @@ function recordTradingWrites(page: Page): string[] {
   return writes;
 }
 
+/**
+ * Clicks `target` and resolves once the page has handled the click and rendered the result, so a
+ * following "nothing opened" check cannot pass just because the UI had no time to react. A window
+ * listener sees the click before the app does (capture phase, so the app cannot stop it); two
+ * animation frames later the app's handler has run and React has committed what it changed.
+ */
+async function clickAndWaitForRender(page: Page, target: Locator): Promise<void> {
+  // The promise sits in an object so that creating the handle does not wait for it.
+  const rendered = await page.evaluateHandle(() => ({
+    done: new Promise<void>((resolve) =>
+      window.addEventListener(
+        'click',
+        () => requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        { capture: true, once: true },
+      ),
+    ),
+  }));
+  await target.click();
+  await rendered.evaluate((r) => r.done);
+  await rendered.dispose();
+}
+
 test.describe('Assets tables on the live account', () => {
   test.skip(!hasCredentials, MISSING_CREDENTIALS_REASON);
 
@@ -70,42 +92,14 @@ test.describe('Assets tables on the live account', () => {
       await tradePage.openPositions.open();
       await expect(tradePage.openPositions.headers).toHaveText(POSITION_COLUMNS);
     });
-
-    test('TC-POS-01 Open Positions shows the empty state when the account has no positions', async ({
-      tradePage,
-      api,
-    }) => {
-      const { marketOrderCounts } = await api.orderCounts();
-      test.skip(marketOrderCounts > 0, `the account holds ${marketOrderCounts} open positions`);
-      const positions = tradePage.openPositions;
-      await positions.open();
-
-      await expect(positions.tab).toHaveText('Open Positions (0)');
-      await expect(positions.emptyState).toBeVisible();
-      await expect(positions.rows).toHaveCount(0);
-      expect(await positions.orderIds()).toEqual([]);
-    });
   });
 
   test.describe('Pending Orders', { tag: '@R3' }, () => {
-    test('TC-PND-01 Pending Orders lists the expected columns', async ({ tradePage }) => {
+    test('TC-PND-01 (table headers) Pending Orders lists the columns a placed order is shown in', async ({
+      tradePage,
+    }) => {
       await tradePage.pendingOrders.open();
       await expect(tradePage.pendingOrders.headers).toHaveText(PENDING_COLUMNS);
-    });
-
-    test('TC-PND-01 Pending Orders shows the empty state when the account has no orders', async ({
-      tradePage,
-      api,
-    }) => {
-      const { pendingOrderCounts } = await api.orderCounts();
-      test.skip(pendingOrderCounts > 0, `the account holds ${pendingOrderCounts} pending orders`);
-      const pending = tradePage.pendingOrders;
-      await pending.open();
-
-      await expect(pending.tab).toHaveText('Pending Orders (0)');
-      await expect(pending.emptyState).toBeVisible();
-      await expect(pending.rows).toHaveCount(0);
-      expect(await pending.orderIds()).toEqual([]);
     });
   });
 
@@ -128,19 +122,31 @@ test.describe('Assets tables on the live account', () => {
       const { marketOrderCounts } = await api.orderCounts();
       test.skip(marketOrderCounts > 0, `the account holds ${marketOrderCounts} open positions`);
       const writes = recordTradingWrites(page);
-      const bulk = tradePage.bulk;
-      await tradePage.openPositions.open();
+      const { bulk, openPositions: positions } = tradePage;
 
-      // With positions listed the same click opens the menu (see the mocked bulk tests).
-      await bulk.closeButton.click();
-      await expect(bulk.closeOption('all')).toBeHidden();
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await test.step('Open Positions is empty', async () => {
+        await positions.open();
+        await expect(positions.tab).toHaveText('Open Positions (0)');
+        await expect(positions.emptyState).toBeVisible();
+        await expect(positions.rows).toHaveCount(0);
+        expect(await positions.orderIds()).toEqual([]);
+      });
 
-      // Still nothing after moving away and back, and the list is unchanged.
-      await tradePage.pendingOrders.open();
-      await tradePage.openPositions.open();
-      await expect(tradePage.openPositions.emptyState).toBeVisible();
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await test.step('Bulk Close opens no menu and no dialog', async () => {
+        // With positions listed the same click opens the menu (see the mocked bulk tests).
+        await clickAndWaitForRender(page, bulk.closeButton);
+        await expect(bulk.closeOption('all')).toBeHidden();
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+      });
+
+      await test.step('still nothing after moving away and back', async () => {
+        await tradePage.pendingOrders.open();
+        await positions.open();
+        await expect(positions.emptyState).toBeVisible();
+        await expect(bulk.closeOption('all')).toBeHidden();
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+      });
+
       expect(writes).toEqual([]);
     });
 
@@ -152,17 +158,30 @@ test.describe('Assets tables on the live account', () => {
       const { pendingOrderCounts } = await api.orderCounts();
       test.skip(pendingOrderCounts > 0, `the account holds ${pendingOrderCounts} pending orders`);
       const writes = recordTradingWrites(page);
-      const bulk = tradePage.bulk;
-      await tradePage.pendingOrders.open();
+      const { bulk, pendingOrders: pending } = tradePage;
 
-      await bulk.deleteButton.click();
-      await expect(bulk.deleteOption('all')).toBeHidden();
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await test.step('Pending Orders is empty', async () => {
+        await pending.open();
+        await expect(pending.tab).toHaveText('Pending Orders (0)');
+        await expect(pending.emptyState).toBeVisible();
+        await expect(pending.rows).toHaveCount(0);
+        expect(await pending.orderIds()).toEqual([]);
+      });
 
-      await tradePage.openPositions.open();
-      await tradePage.pendingOrders.open();
-      await expect(tradePage.pendingOrders.emptyState).toBeVisible();
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await test.step('Bulk Delete opens no menu and no dialog', async () => {
+        await clickAndWaitForRender(page, bulk.deleteButton);
+        await expect(bulk.deleteOption('all')).toBeHidden();
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+      });
+
+      await test.step('still nothing after moving away and back', async () => {
+        await tradePage.openPositions.open();
+        await pending.open();
+        await expect(pending.emptyState).toBeVisible();
+        await expect(bulk.deleteOption('all')).toBeHidden();
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+      });
+
       expect(writes).toEqual([]);
     });
   });
