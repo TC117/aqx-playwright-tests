@@ -7,9 +7,9 @@ Aquariux AQX Trader web demo environment.
   (104 cases, with its automation-feasibility assessment) and set 002
   (88 cases). How the two were merged is described in
   [§12](#12-merge-notes) and [§13](#13-id-mapping).
-- **Basis:** the assessment requirements and standard CFD/FX trading rules. The trading UI has
-  not been explored yet, so labels, order types, expiry options and bulk actions marked
-  _"if supported"_ must be confirmed on the platform ([§11](#11-open-questions)).
+- **Basis:** the assessment requirements and standard CFD/FX trading rules. The cases were
+  written before the trading UI was explored; most open questions are now answered in
+  [platform-notes.md](platform-notes.md) (see [§11](#11-open-questions)).
 
 ---
 
@@ -325,6 +325,13 @@ A case with two run types (for example `Slow + Mocked`) is counted under each of
 
 ### 9.1 Login prerequisites (must be fixed first)
 
+> **Status (2026-11-08):** items 1–3 and 7 are done: logged-in tests skip without credentials,
+> setup waits for the trade screen and saves the API bearer, `LoginPage` uses the app's test
+> ids, and trading needs a demo account and `ALLOW_TRADING=true`. Item 4 did not apply (the
+> session lives in localStorage). Instead of re-logging in (item 5), setup reuses the saved
+> session while the server accepts it. Item 6: retries are off; clean-up removes the test's own
+> orders one by one.
+
 1. When `.env` is empty, the `setup` project skips but the `trading` tests **fail** with
    `ENOENT .auth/user.json` instead of skipping as the README says. Trading tests must skip with
    the same reason.
@@ -434,6 +441,20 @@ A case with two run types (for example `Slow + Mocked`) is counted under each of
   new demo account is needed.
 
 ## 11. Open questions
+
+> **Answered on the live demo (2026-11-08)** – details in [platform-notes.md](platform-notes.md):
+> 1 – Market, Limit, Stop and Stop Limit; Good Till Canceled, Good Till Day, Specified Date and
+> Time, Specified Date. 2 – both price and points. 3 – `stopsLevel` in the symbol detail; the
+> browser does not enforce it. 4 – the terms dialog appears on every activation and the setting is
+> stored per account on the server. 6 – All / Profitable / Loss positions, All / Limit / Stop
+> orders, at most 30 per action, chosen by the P/L the browser shows. 7 – Positions History holds
+> balance operations; Orders & Deals holds orders and deals with their state. 8 – the place button
+> is disabled for every order type while closed. 11 – REST with a bearer token, prices over SockJS
+> + STOMP. 12 – the browser checks the SL/TP side but not the stops level, and calculates the
+> floating P/L. 13 – service workers are blocked in the mocked project. 15 – `status` /
+> `marketStatus` in the symbol list and a "Market Closed" button. 16 – EURUSD min 0.01, step 0.01,
+> max 100. 17 – recorded in platform-notes.md. Still open: 5 (partial-close Order No.), 9, 10, 14
+> (they need executions).
 
 1. Which pending types are offered (Limit, Stop and Stop Limit, or only Stop – public sources
    disagree) and the exact names of the expiry options (expected: Good Till Cancelled, Good Till
