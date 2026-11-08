@@ -28,7 +28,7 @@ async function openPosition(
 ): Promise<string> {
   const before = await orders.positionIds();
   await tradePage.orderPanel.placeMarketOrder({ side, volume });
-  return orders.newPosition(before);
+  return orders.newPosition(before, { side, volume });
 }
 
 async function placePending(
@@ -38,7 +38,7 @@ async function placePending(
 ): Promise<string> {
   const before = await orders.pendingIds();
   await tradePage.orderPanel.placePendingOrder(order);
-  return orders.newPendingOrder(before);
+  return orders.newPendingOrder(before, order);
 }
 
 /** Order Nos. the server holds, sorted. */
@@ -70,16 +70,29 @@ async function skipUnlessAccountHoldsOnly(
   );
 }
 
-/** [winner, loser] once one position is in profit and the other at a loss, else empty ids. */
+/**
+ * Whether a position is clearly in profit or at a loss. The UI picks the positions to close by
+ * the P/L it shows when the menu entry is clicked, a few seconds after this check, so "clearly"
+ * means by more than one spread. Compared in price, so no currency conversion is needed: Bid −
+ * entry for a Buy, entry − Ask for a Sell.
+ */
+async function standing(tradePage: TradePage, orderId: string): Promise<'profit' | 'loss' | ''> {
+  const row = await tradePage.openPositions.read(orderId);
+  const { bid, ask } = await tradePage.orderPanel.quote();
+  const spread = ask - bid;
+  const edge = row.side === 'BUY' ? bid - row.entryPrice : row.entryPrice - ask;
+  return edge > spread ? 'profit' : edge < -spread ? 'loss' : '';
+}
+
+/** [winner, loser] once one position is clearly in profit and the other clearly at a loss. */
 async function winnerAndLoser(
   tradePage: TradePage,
   a: string,
   b: string,
 ): Promise<[string, string]> {
-  const profitA = Number((await tradePage.openPositions.read(a)).profit);
-  const profitB = Number((await tradePage.openPositions.read(b)).profit);
-  if (profitA > 0 && profitB < 0) return [a, b];
-  if (profitB > 0 && profitA < 0) return [b, a];
+  const [standingA, standingB] = [await standing(tradePage, a), await standing(tradePage, b)];
+  if (standingA === 'profit' && standingB === 'loss') return [a, b];
+  if (standingB === 'profit' && standingA === 'loss') return [b, a];
   return ['', ''];
 }
 
@@ -222,8 +235,8 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
     'TC-BLK-02 TC-BLK-03 Close profitable / losing closes only positions with that P/L sign',
     { tag: '@slow' },
     async ({ page, tradePage, orders, api, symbol }) => {
-      // New positions start at a loss (the spread); a Buy and a Sell split into one winner and one
-      // loser once the price moves more than the spread.
+      // New positions start at a loss (the spread); a Buy and a Sell split into one clear winner
+      // and one clear loser once the price has moved about two spreads (see `standing`).
       test.setTimeout(300_000);
       const lot = (await api.symbolDetail(symbol)).minContractLotSize;
       const buy = await openPosition(tradePage, orders, 'BUY', lot);
@@ -240,9 +253,11 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
       try {
         await expect.poll(split, { timeout: 180_000, intervals: [2_000] }).toBe(true);
       } catch {
-        test.skip(true, 'the price did not move more than the spread within 3 minutes');
+        test.skip(true, 'the price did not move clearly away from the open within 3 minutes');
       }
       await skipUnlessAccountHoldsOnly(api, { positions: [buy, sell], pending: [] });
+      // Checked again right before the menu entry is clicked.
+      test.skip(!(await split()), 'the two positions came back within one spread of their open');
 
       await test.step('Profitable Positions', async () => {
         const sent = nextBulkRequest(page, TRADE_API.bulkClose);
@@ -253,8 +268,11 @@ test.describe('Bulk actions on the live account', { tag: ['@R5', '@market-open']
       });
 
       await test.step('Loss Positions', async () => {
-        // Prices may have moved: only close when the remaining position is still at a loss.
-        test.skip(Number((await positions.read(loser)).profit) >= 0, 'the loser turned profitable');
+        // Prices may have moved: only close when the remaining position is still clearly at a loss.
+        test.skip(
+          (await standing(tradePage, loser)) !== 'loss',
+          'the loser is no longer clearly at a loss',
+        );
         const sent = nextBulkRequest(page, TRADE_API.bulkClose);
         await tradePage.bulk.closePositions('loss');
         expect(await sent).toEqual([loser]);

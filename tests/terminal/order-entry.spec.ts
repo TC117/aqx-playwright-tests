@@ -1,7 +1,7 @@
 import type { AqxApi, SymbolDetail } from '../../src/api/AqxApi';
 import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env';
 import { expect, test } from '../../src/fixtures/test';
-import { formatPrice, roundTo } from '../../src/helpers/numbers';
+import { decimalsOf, formatPrice, roundTo } from '../../src/helpers/numbers';
 import {
   closePrice,
   executionPrice,
@@ -73,10 +73,6 @@ const PENDING_SIDE_MESSAGES: Record<Side, string[]> = {
 
 async function symbolRules(api: AqxApi, symbol: string): Promise<SymbolRules> {
   return (await api.symbolDetail(symbol)) as SymbolRules;
-}
-
-function decimalsOf(n: number): number {
-  return (String(n).split('.')[1] ?? '').length;
 }
 
 /** Asserts `actual` lies between the smallest and largest of `bounds`, give or take `tolerance`. */

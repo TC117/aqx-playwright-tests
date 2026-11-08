@@ -108,11 +108,15 @@ Totals: smoke 1, terminal 42, mocked 44, trading 49 (136 tests).
 - **The platform decides whether the market is open.** `skipUnlessMarketOpen` reads the symbol's
   status from the platform's API. A test never infers "closed" from missing prices, so an outage
   while the market is open still fails.
-- **Own your orders.** The account is shared, so a trading test snapshots the Order No. list,
-  treats exactly one new number as its own (`OrderTracker`) and removes only that at the end, one
-  item at a time. Bulk-action tests skip unless the account holds nothing but their own orders.
-- **Safety guards.** Real orders need `ALLOW_TRADING=true`, and the `orders` fixture refuses to trade on anything but a demo account. Tests
-  that switch One-Click Trading on switch it off again in teardown, even after a failure.
+- **Own your orders.** The account is shared, so a trading test snapshots the Order No. list
+  (from the API, which lists every item; the tables show at most 30), treats exactly one new
+  number for its symbol, side and volume as its own (`OrderTracker`) and removes only that at the
+  end, one item at a time through the UI. A test skips while the account holds too many items for
+  the tables to list its own. Bulk-action tests skip unless the account holds nothing but their
+  own orders.
+- **Safety guards.** Real orders need `ALLOW_TRADING=true`, and the `orders` fixture refuses to
+  trade unless both the API and the UI's account badge say demo. Tests that switch One-Click
+  Trading on switch it off again in teardown, even after a failure.
 - **Values, not visibility.** Tests compare prices, volumes, SL/TP, Order No., states and money
   across the order panel, the tables, notifications, history and the API. Expected numbers come
   from the symbol specification and the account (API), not from hard-coded values. Fill prices
@@ -136,9 +140,10 @@ Totals: smoke 1, terminal 42, mocked 44, trading 49 (136 tests).
 [`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs type check, lint and format,
 then `smoke`, `terminal` and `mocked` on every push to `main` and every pull request. Credentials
 come from the `TRADER_USERNAME` / `TRADER_PASSWORD` repository secrets; without them the
-logged-in tests skip. The `trading` project runs only on a manual run with "trading" ticked, which also sets `ALLOW_TRADING=true`. All
-runs share one concurrency group because they share one demo account. The HTML report is
-uploaded as an artifact.
+logged-in tests skip. The `trading` project runs only on a manual run with "trading" ticked, which also sets `ALLOW_TRADING=true`. The
+Playwright jobs share one concurrency group because they share one demo account; the static
+checks are outside it, so they never wait for or get cancelled by another run. The HTML report
+is uploaded as an artifact.
 
 ## Assumptions and environment limitations
 

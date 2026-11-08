@@ -494,7 +494,12 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
           'details response is a fabricated history entry, and the dialog may read a field the ' +
           'real details response has. Check with a real closed position.',
       });
-      expect(details).toEqual({
+      // Units on its own (see the 'issue' annotation): "0" is what the dialog shows today, the
+      // history row's units are the right answer once that is fixed; anything else fails.
+      const { Units: units, ...fields } = details.fields;
+      expect(lastClose.units, 'Positions History shows the units').toMatch(/\d/);
+      expect(['0', lastClose.units, lastClose.units.replace(/,/g, '')]).toContain(units);
+      expect({ ...details, fields }).toEqual({
         title: 'Position Closed',
         symbol: lastClose.symbol,
         side: lastClose.type,
@@ -503,8 +508,6 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
           'Closed Time': lastClose.closeDate,
           'Order No.': lastClose.orderId,
           Volume: String(closedVolume(lastClose.volumeText)),
-          // What the dialog shows today; the history row says 6,000 (see the 'issue' annotation).
-          Units: '0',
           'Profit/Loss': `+${lastClose.profit!.toFixed(2)}`,
           'ROI%': '--',
           'Entry Price': String(lastClose.entryPrice),

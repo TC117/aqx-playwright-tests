@@ -107,6 +107,29 @@ export function calendarDayLabel(clock: Pick<ServerClock, 'year' | 'month' | 'da
   }).format(new Date(Date.UTC(clock.year, clock.month - 1, clock.day)));
 }
 
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** Months since year 0 for a calendar label such as "November 2026". */
+function monthNumber(label: string): number {
+  const match = /([A-Z][a-z]+)\s+(\d{4})/.exec(label);
+  const month = match ? MONTH_NAMES.indexOf(match[1]!) : -1;
+  if (!match || month < 0) throw new Error(`Cannot read the calendar month "${label}"`);
+  return Number(match[2]) * 12 + month;
+}
+
 /**
  * Picks a day in the date picker (react-calendar) opened by `dateInput`, which then shows the date
  * as `2026-11-10`. Used by the order panel and the Edit Order dialog.
@@ -121,15 +144,17 @@ export async function pickCalendarDate(
   const calendar = page.locator('.react-calendar');
   await expect(calendar).toBeVisible();
   const monthLabel = calendar.locator('.react-calendar__navigation__label');
-  const target = new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(Date.UTC(clock.year, clock.month - 1, 1)));
-  for (let i = 0; !(await monthLabel.innerText()).includes(target); i++) {
-    if (i > 24) throw new Error(`The calendar never reached ${target}`);
+  // The calendar opens on the input's current month, which can lie after the target (an order
+  // that already expires later), so it is moved either way.
+  const wanted = clock.year * 12 + clock.month - 1;
+  const maxSteps = Math.abs(wanted - monthNumber(await monthLabel.innerText())) + 2;
+  for (let i = 0; ; i++) {
     const shown = await monthLabel.innerText();
-    await calendar.locator('.react-calendar__navigation__next-button').click();
+    const steps = wanted - monthNumber(shown);
+    if (steps === 0) break;
+    if (i >= maxSteps) throw new Error(`The calendar never reached ${clock.year}-${clock.month}`);
+    const button = steps > 0 ? 'next' : 'prev';
+    await calendar.locator(`.react-calendar__navigation__${button}-button`).click();
     await expect(monthLabel).not.toHaveText(shown);
   }
   await calendar.getByRole('button', { name: calendarDayLabel(clock), exact: true }).click();

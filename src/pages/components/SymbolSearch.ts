@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { exactly } from '../../helpers/text';
 
 /** Symbol search box in the header. Results appear in a dropdown while typing. */
 export class SymbolSearch {
@@ -21,7 +22,7 @@ export class SymbolSearch {
       await expect(this.input).toHaveValue(symbol, { timeout: 1_000 });
     }).toPass({ timeout: 15_000 });
     await this.results
-      .filter({ hasText: new RegExp(`^${symbol}$`) })
+      .filter({ hasText: exactly(symbol) })
       .first()
       .click();
   }

@@ -3,7 +3,7 @@ import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env
 import { test, expect } from '../../src/fixtures/test';
 import type { OrderTracker } from '../../src/helpers/OrderTracker';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
-import { closeTo, offsetByPoints, roundTo } from '../../src/helpers/numbers';
+import { closeTo, offsetByPoints, roundLots, roundTo } from '../../src/helpers/numbers';
 import type { MarketOrderInput, PositionRow } from '../../src/models/trading';
 import type { TradePage } from '../../src/pages/TradePage';
 import { OrderRejectedError } from '../../src/pages/components/tradeRequests';
@@ -49,7 +49,7 @@ async function openPosition(
 ): Promise<string> {
   const before = await orders.positionIds();
   await tradePage.orderPanel.placeMarketOrder(order);
-  return orders.newPosition(before);
+  return orders.newPosition(before, order);
 }
 
 type ServerItem = Record<string, unknown>;
@@ -244,7 +244,7 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
       const { spec, away } = await levels(api, symbol);
       const step = spec.lotSizeStep;
       const quote = await tradePage.orderPanel.quote();
-      const volume = roundTo(2 * spec.minContractLotSize, 2);
+      const volume = roundLots(2 * spec.minContractLotSize, step);
       const id = await openPosition(tradePage, orders, {
         side: 'BUY',
         volume,
@@ -255,12 +255,12 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
       const before = await positions.read(id);
       const closed = spec.minContractLotSize;
 
-      await positions.close(id, { volume: closed });
+      await orders.closePart(id, closed);
 
       await test.step('the rest stays open under the same Order No. with the same levels', async () => {
         expect(await positions.read(id)).toMatchObject({
           orderId: id,
-          volume: roundTo(volume - closed, 2),
+          volume: roundLots(volume - closed, step),
           entryPrice: before.entryPrice,
           stopLoss: before.stopLoss,
           takeProfit: before.takeProfit,
@@ -356,7 +356,10 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
         takeProfit: away(price, 1),
         expiry: 'Good Till Canceled',
       });
-      const id = await orders.newPendingOrder(before);
+      const id = await orders.newPendingOrder(before, {
+        side: 'BUY',
+        volume: spec.minContractLotSize,
+      });
 
       const newPrice = away(ask, -4);
       const changes = {
@@ -402,7 +405,10 @@ test.describe('Managing positions and pending orders', { tag: ['@market-open'] }
         volume: spec.minContractLotSize,
         price: away(ask, -3),
       });
-      const id = await orders.newPendingOrder(before);
+      const id = await orders.newPendingOrder(before, {
+        side: 'BUY',
+        volume: spec.minContractLotSize,
+      });
 
       await tradePage.pendingOrders.delete(id);
       orders.release(id);

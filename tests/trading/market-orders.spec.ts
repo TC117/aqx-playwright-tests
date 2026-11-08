@@ -61,7 +61,7 @@ async function placeExpectingRejection(
 ): Promise<void> {
   const before = await orders.positionIds();
   await panel.placeMarketOrder(order);
-  await orders.newPosition(before);
+  await orders.newPosition(before, order);
 }
 
 test.describe(
@@ -102,7 +102,7 @@ test.describe(
 
         const quoteAfter = await panel.quote();
         // Owned before any check, so a failed check cannot leave the position on the account.
-        const orderId = await orders.newPosition(before);
+        const orderId = await orders.newPosition(before, order);
 
         await test.step('the confirmation dialog showed the order', async () => {
           expectConfirmation(panel.lastConfirmation, symbol, order);
@@ -148,7 +148,9 @@ test.describe(
 
         await panel.placeMarketOrder(order);
 
-        const position = await tradePage.openPositions.read(await orders.newPosition(before));
+        const position = await tradePage.openPositions.read(
+          await orders.newPosition(before, order),
+        );
         expect(position.stopLoss).toBe(order.stopLoss ?? null);
         expect(position.takeProfit).toBe(order.takeProfit ?? null);
       });
@@ -241,8 +243,11 @@ test.describe(
           spec.stopsLevel + 5,
         );
         const before = await orders.positionIds();
-        await panel.placeMarketOrder({ side: 'BUY', volume: spec.minContractLotSize, stopLoss });
-        const position = await tradePage.openPositions.read(await orders.newPosition(before));
+        const order: MarketOrderInput = { side: 'BUY', volume: spec.minContractLotSize, stopLoss };
+        await panel.placeMarketOrder(order);
+        const position = await tradePage.openPositions.read(
+          await orders.newPosition(before, order),
+        );
         expect(position.stopLoss).toBe(stopLoss);
       });
     });

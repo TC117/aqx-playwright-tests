@@ -11,11 +11,6 @@ on:
         type: boolean
         default: false
 
-# All runs share one demo account, so they must never overlap.
-concurrency:
-  group: aqx-demo-account
-  cancel-in-progress: false
-
 jobs:
   static:
     name: Type check, lint, format
@@ -35,6 +30,12 @@ jobs:
     name: Playwright
     needs: static
     runs-on: ubuntu-latest
+    # All runs share one demo account, so the Playwright jobs must never overlap. Only this job
+    # takes the lock: the static checks of every push still run (and are never cancelled) while
+    # another run holds the account. GitHub keeps one waiting job per group and cancels older ones.
+    concurrency:
+      group: aqx-demo-account
+      cancel-in-progress: false
     # Above the suite's own globalTimeout (50 min), so fixtures can still clean up.
     timeout-minutes: 60
     env:

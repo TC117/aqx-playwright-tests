@@ -24,6 +24,17 @@ export function roundTo(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
 
+/** Number of decimals `n` is written with: 2 for 0.01, 7 for 1e-7. */
+export function decimalsOf(n: number): number {
+  const [mantissa = '', exponent = '0'] = String(n).split('e');
+  return Math.max(0, (mantissa.split('.')[1] ?? '').length - Number(exponent));
+}
+
+/** Rounds a volume in lots to the decimals of the symbol's lot size step (0.01, 0.001, …). */
+export function roundLots(lots: number, lotSizeStep: number): number {
+  return roundTo(lots, decimalsOf(lotSizeStep));
+}
+
 /** Formats a price with exactly `digits` decimals, as the inputs expect. */
 export function formatPrice(value: number, digits: number): string {
   return value.toFixed(digits);

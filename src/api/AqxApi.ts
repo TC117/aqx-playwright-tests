@@ -192,8 +192,17 @@ export class AqxApi {
     const result = await this.get<{ tradingAccounts: (TradingAccount & { selected?: boolean })[] }>(
       '/api/user/account/v1',
     );
-    const account = result.tradingAccounts.find((a) => a.selected) ?? result.tradingAccounts[0];
-    if (!account) throw new Error('The user has no trading account');
+    const accounts = result.tradingAccounts;
+    // Never guess between several accounts: the demo-account guard relies on this answer.
+    const account =
+      accounts.find((a) => a.selected) ?? (accounts.length === 1 ? accounts[0] : undefined);
+    if (!account) {
+      throw new Error(
+        accounts.length
+          ? `Cannot tell which of the ${accounts.length} trading accounts is selected`
+          : 'The user has no trading account',
+      );
+    }
     return account;
   }
 
@@ -201,12 +210,14 @@ export class AqxApi {
     return this.get('/api/trade/order/v1/counts');
   }
 
-  openPositions(): Promise<ServerPosition[]> {
-    return this.get('/api/trade/order/v1');
+  /** Every open position of the account (an empty list when the server answers `null`). */
+  async openPositions(): Promise<ServerPosition[]> {
+    return (await this.get<ServerPosition[] | null>('/api/trade/order/v1')) ?? [];
   }
 
-  pendingOrders(): Promise<ServerPendingOrder[]> {
-    return this.get('/api/trade/order/v1/pending');
+  /** Every pending order of the account (an empty list when the server answers `null`). */
+  async pendingOrders(): Promise<ServerPendingOrder[]> {
+    return (await this.get<ServerPendingOrder[] | null>('/api/trade/order/v1/pending')) ?? [];
   }
 
   /** Positions History between two moments (defaults: the last 30 days). */

@@ -128,9 +128,8 @@ async function placeExpectingRejection(
   await expect
     .poll(
       async () => {
-        const opened = [...(await orders.positionIds())].filter((id) => !positionsBefore.has(id));
-        opened.forEach((id) => orders.ownPosition(id));
-        placed = [...(await orders.pendingIds())].filter((id) => !pendingBefore.has(id)).length;
+        const opened = await orders.ownNewPositions(positionsBefore, order);
+        placed = (await orders.ownNewPendingOrders(pendingBefore, order)).length;
         return opened.length + placed;
       },
       {
@@ -139,7 +138,7 @@ async function placeExpectingRejection(
       },
     )
     .toBeGreaterThan(0);
-  if (placed) await orders.newPendingOrder(pendingBefore);
+  if (placed) await orders.newPendingOrder(pendingBefore, order);
 }
 
 test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () => {
@@ -189,7 +188,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
       // Owned before any check, so a failed check cannot leave the order on the account.
       const orderId = await test.step('place the order', async () => {
         await panel.placePendingOrder(order);
-        return orders.newPendingOrder(before);
+        return orders.newPendingOrder(before, order);
       });
 
       await test.step('the confirmation dialog showed the order', async () => {
@@ -250,7 +249,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
         };
 
         await panel.placePendingOrder(order);
-        const orderId = await orders.newPendingOrder(before);
+        const orderId = await orders.newPendingOrder(before, order);
         expectConfirmation(panel.lastConfirmation, order);
 
         expect(await tradePage.pendingOrders.read(orderId)).toMatchObject({
@@ -287,7 +286,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
 
     await panel.placePendingOrder(order);
 
-    const row = await tradePage.pendingOrders.read(await orders.newPendingOrder(before));
+    const row = await tradePage.pendingOrders.read(await orders.newPendingOrder(before, order));
     expect(row).toMatchObject({ takeProfit: order.takeProfit, stopLoss: order.stopLoss });
   });
 
@@ -362,7 +361,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
       const before = await orders.pendingIds();
       const outside = await buyLimit(spec.stopsLevel + 5);
       await panel.placePendingOrder(outside);
-      const row = await tradePage.pendingOrders.read(await orders.newPendingOrder(before));
+      const row = await tradePage.pendingOrders.read(await orders.newPendingOrder(before, outside));
       expect(row.price).toBe(outside.price);
     });
   });
@@ -390,7 +389,7 @@ test.describe('R3 Place pending orders', { tag: ['@R3', '@market-open'] }, () =>
       };
       const before = await orders.pendingIds();
       await panel.placePendingOrder(order);
-      const orderId = await orders.newPendingOrder(before);
+      const orderId = await orders.newPendingOrder(before, order);
       expect(await tradePage.pendingOrders.read(orderId)).toMatchObject({
         expiry,
         expiryDate: expectedExpiryDate(expiry, serverClock(new Date(), offset), expiresAt, offset),

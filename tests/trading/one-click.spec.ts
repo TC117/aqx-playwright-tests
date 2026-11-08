@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { hasCredentials, MISSING_CREDENTIALS_REASON } from '../../src/config/env';
 import { test as base, expect } from '../../src/fixtures/test';
 import { skipUnlessMarketOpen } from '../../src/helpers/market';
-import { roundTo } from '../../src/helpers/numbers';
+import { roundLots, roundTo } from '../../src/helpers/numbers';
 import type { Quote, Side } from '../../src/models/trading';
 import type { OneClickTrading } from '../../src/pages/components/OneClickTrading';
 
@@ -104,15 +104,16 @@ test.describe('One-Click Trading on the real server', { tag: ['@R2', '@market-op
 
       await test.step(`click ${side} once`, async () => {
         await place(oneClickOn, volume);
-        // Soft, so a failed check still lets the test take ownership of the position below.
-        await expect.soft(tradePage.notifications.toast).toHaveText(SUCCESS);
+        // Soft, so a failed check still lets the test take ownership of the position below. The
+        // newest toast: "One-Click Trading activated." from the fixture can still be on screen.
+        await expect.soft(tradePage.notifications.toast.last()).toHaveText(SUCCESS);
         await expect.soft(page.getByTestId('trade-confirmation-button-confirm')).toBeHidden();
       });
 
       const quoteAfter = await oneClickOn.quote();
 
       await test.step('exactly one new position, with the side, volume and price clicked', async () => {
-        const orderId = await orders.newPosition(before);
+        const orderId = await orders.newPosition(before, { side, volume });
         const row = await tradePage.openPositions.read(orderId);
         expect(row).toMatchObject({ orderId, symbol, side, volume });
         expectFilledBetween(
@@ -136,7 +137,7 @@ test.describe('One-Click Trading on the real server', { tag: ['@R2', '@market-op
     }) => {
       const { orderPanel } = tradePage;
       const spec = await api.symbolDetail(symbol);
-      const volume = roundTo(spec.minContractLotSize * 2, 2);
+      const volume = roundLots(spec.minContractLotSize * 2, spec.lotSizeStep);
       // One-Click Trading selects its own tab; the Trade form is still one click away.
       await oneClickOn.expectSwitch('on');
       await orderPanel.tradeTab.click();
@@ -154,7 +155,7 @@ test.describe('One-Click Trading on the real server', { tag: ['@R2', '@market-op
 
       await orderPanel.placeMarketOrder(order);
 
-      const orderId = await orders.newPosition(before);
+      const orderId = await orders.newPosition(before, order);
       expect(await confirmationSeen(), 'the confirmation dialog should not appear').toBe(false);
       expect(await tradePage.openPositions.read(orderId)).toMatchObject({
         orderId,

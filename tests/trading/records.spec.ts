@@ -6,7 +6,7 @@ import {
   formatPrice,
   offsetByPoints,
   parseUiNumber,
-  roundTo,
+  roundLots,
 } from '../../src/helpers/numbers';
 import type { TradePage } from '../../src/pages/TradePage';
 import type {
@@ -65,9 +65,9 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
       await skipUnlessMarketOpen(api, symbol);
       const spec = await api.symbolDetail(symbol);
       const { orderPanel, openPositions, history, notifications } = tradePage;
-      const volume = roundTo(spec.minContractLotSize * 2, 2);
+      const volume = roundLots(spec.minContractLotSize * 2, spec.lotSizeStep);
       const partial = spec.minContractLotSize;
-      const remaining = roundTo(volume - partial, 2);
+      const remaining = roundLots(volume - partial, spec.lotSizeStep);
       const price = (value: number | null) => formatPrice(value ?? NaN, spec.digits);
 
       const balanceBefore = (await api.account()).balance;
@@ -85,7 +85,7 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
         });
         // Soft, so a wrong toast still lets the test take ownership of the position below.
         await expect.soft(notifications.toast.last()).toHaveText('Position has been created.');
-        return orders.newPosition(positionsBefore);
+        return orders.newPosition(positionsBefore, { side: 'BUY', volume });
       });
 
       const opened = await openPositions.read(id);
@@ -104,7 +104,7 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
       });
 
       const firstClose = await test.step(`close ${partial} of ${volume}`, async () => {
-        await openPositions.close(id, { volume: partial });
+        await orders.closePart(id, partial);
         await expect.poll(async () => (await openPositions.read(id)).volume).toBe(remaining);
         let rows: PositionHistoryRecord[] = [];
         await expect(async () => {
@@ -125,6 +125,8 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
       });
 
       await test.step('close the rest', async () => {
+        // The previous step ends on Positions History.
+        await openPositions.open();
         await openPositions.close(id);
         orders.release(id);
         await expect(openPositions.row(id)).toHaveCount(0);
@@ -144,7 +146,7 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
           takeProfit: opened.takeProfit,
         });
         const total = rows.reduce((sum, r) => sum + closedVolume(r.volumeText), 0);
-        expect(roundTo(total, 2)).toBe(volume);
+        expect(roundLots(total, spec.lotSizeStep)).toBe(volume);
         return rows;
       });
 
@@ -272,7 +274,7 @@ test.describe('Records of real orders', { tag: '@market-open' }, () => {
         });
         // Soft, so a wrong toast still lets the test take ownership of the order below.
         await expect.soft(notifications.toast.last()).toHaveText('Order has been created.');
-        const orderId = await orders.newPendingOrder(before);
+        const orderId = await orders.newPendingOrder(before, { side: 'BUY', volume });
         expect(await pendingOrders.read(orderId)).toMatchObject({
           orderId,
           symbol,

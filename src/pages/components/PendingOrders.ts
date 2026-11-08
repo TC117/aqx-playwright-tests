@@ -3,7 +3,8 @@ import { parseUiNumber, requireUiNumber } from '../../helpers/numbers';
 import type { Expiry, PendingOrderRow } from '../../models/trading';
 import { DeleteOrderDialog } from './DeleteOrderDialog';
 import { EditOrderDialog } from './EditOrderDialog';
-import { exactly, RENDERED_ROW_LIMIT, tabCount } from './OpenPositions';
+import { exactly } from '../../helpers/text';
+import { RENDERED_ROW_LIMIT, tabCount } from './OpenPositions';
 import { submitTradeRequest, TRADE_API } from './tradeRequests';
 
 /**

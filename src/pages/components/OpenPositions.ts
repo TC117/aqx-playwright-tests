@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { parseUiNumber, requireUiNumber } from '../../helpers/numbers';
+import { exactly } from '../../helpers/text';
 import type { PositionRow, Side } from '../../models/trading';
 import { ClosePositionDialog } from './ClosePositionDialog';
 import { EditPositionDialog } from './EditPositionDialog';
@@ -16,11 +17,6 @@ export function tabCount(label: string): number {
   const match = /\((\d+)\)/.exec(label);
   if (!match) throw new Error(`No count in the tab label "${label}"`);
   return Number(match[1]);
-}
-
-/** Regex matching exactly `text` (after trimming). */
-export function exactly(text: string): RegExp {
-  return new RegExp(`^\\s*${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`);
 }
 
 /**
@@ -152,6 +148,8 @@ export class OpenPositions {
    * Closes a position, fully or (with `volume`) partially, through the Close dialog. With One-Click
    * Trading on, the close button closes the whole position at once, so a partial close then
    * fails. Resolves once the server accepted and the row is gone (full) or shows less volume.
+   * Trading tests close part of a position through `OrderTracker.closePart`, which also owns the
+   * rest when it is listed under a new Order No.
    */
   async close(orderId: string, options: { volume?: number } = {}): Promise<void> {
     const row = this.row(orderId);

@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, type Response } from '@playwright/test';
 import { parseUiNumber } from '../../helpers/numbers';
+import { exactly } from '../../helpers/text';
 import type { OrderDealRow, PositionHistoryRow } from '../../models/trading';
 
 /** Presets of the history date-range picker (`orders-date-picker-dropdown`). */
@@ -138,7 +139,7 @@ export class TradeHistory {
     return this.positionRows.filter({
       has: this.page
         .getByTestId('asset-history-column-order-id')
-        .filter({ hasText: new RegExp(`^\\s*${escapeRegExp(orderId)}\\s*$`) }),
+        .filter({ hasText: exactly(orderId) }),
     });
   }
 
@@ -257,10 +258,6 @@ export function toServerTime(epochMs: number, serverUtcOffsetHours: number): str
 
 function isHistoryRequest(response: Response, api: string): boolean {
   return response.request().method() === 'GET' && new URL(response.url()).pathname === api;
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** Reads every `asset-history-column-*` cell of a row in one go, keyed by the column name. */

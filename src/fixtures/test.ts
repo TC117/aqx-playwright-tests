@@ -9,6 +9,7 @@ import {
 import { OrderTracker } from '../helpers/OrderTracker';
 import { LoginPage } from '../pages/LoginPage';
 import { TradePage } from '../pages/TradePage';
+import { RENDERED_ROW_LIMIT } from '../pages/components/OpenPositions';
 import { TRADE_WRITES } from '../pages/components/tradeRequests';
 
 type Fixtures = {
@@ -31,6 +32,9 @@ type Fixtures = {
 const isOrderWrite = (url: URL): boolean => url.pathname.startsWith(TRADE_WRITES);
 
 const LOGGED_IN_PROJECTS = new Set(['terminal', 'mocked', 'trading']);
+
+/** Room left for one trading test: the most it creates of one kind is 3 (the bulk tests). */
+const MAX_ITEMS_PER_TEST = 5;
 
 /** Playwright `test` with page objects available as fixtures. Import `test` from here in specs. */
 export const test = base.extend<Fixtures>({
@@ -57,13 +61,22 @@ export const test = base.extend<Fixtures>({
     await use(tradePage);
   },
 
-  orders: async ({ api, tradePage }, use, testInfo) => {
+  orders: async ({ api, tradePage, symbol }, use, testInfo) => {
     // Opt-in: a run only places orders when someone asked for it on purpose.
     testInfo.skip(!env.allowTrading, TRADING_NOT_ALLOWED_REASON);
-    // Safety guard: never place orders on anything but a demo account.
+    // Safety guard: never place orders on anything but a demo account, checked on the server and
+    // on the account the UI is actually trading on.
     const account = await api.account();
     expect(account.isDemo, `account ${account.accountId} must be a demo account`).toBe(true);
-    const tracker = new OrderTracker(tradePage);
+    await expect(tradePage.account.typeTag, 'the UI must be on a demo account').toHaveText(/demo/i);
+    // The tables render at most 30 rows, and an item beyond them can be neither checked nor
+    // removed through the UI. Leave room for what one test creates.
+    const [positions, pending] = await Promise.all([api.openPositions(), api.pendingOrders()]);
+    testInfo.skip(
+      Math.max(positions.length, pending.length) + MAX_ITEMS_PER_TEST > RENDERED_ROW_LIMIT,
+      `the shared account holds ${positions.length} positions and ${pending.length} pending orders; the tables list only ${RENDERED_ROW_LIMIT}, so this test could not follow its own`,
+    );
+    const tracker = new OrderTracker(tradePage, api, symbol);
     await use(tracker);
     await tracker.cleanUp();
   },
