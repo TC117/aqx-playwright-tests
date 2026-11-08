@@ -21,10 +21,11 @@ interface ServerItem {
   lotSize: number;
 }
 
-/** A table the tracker removes items from (Open Positions or Pending Orders). */
+/** A table the tracker reads and removes items from (Open Positions or Pending Orders). */
 interface Table {
   open(): Promise<void>;
   orderIds(): Promise<string[]>;
+  row(orderId: string): { count(): Promise<number> };
 }
 
 /** One kind of owned item and how to remove it. */
@@ -98,11 +99,8 @@ export class OrderTracker {
       () => this.api.openPositions(),
       before,
     );
-    await this.tradePage.openPositions.open();
-    await expect(
-      this.tradePage.openPositions.row(id),
-      `position ${id} should be listed`,
-    ).toHaveCount(1, { timeout: 20_000 });
+    const { openPositions, pendingOrders } = this.tradePage;
+    await this.waitUntilListed(openPositions, pendingOrders, id, 'position');
     await this.expectNoLateDuplicate('open position', id, ownNew);
     return id;
   }
@@ -131,11 +129,8 @@ export class OrderTracker {
         `Pending order filled at once as position ${filled.join(', ')}; it is owned, so clean-up closes it`,
       );
     }
-    await this.tradePage.pendingOrders.open();
-    await expect(
-      this.tradePage.pendingOrders.row(id),
-      `pending order ${id} should be listed`,
-    ).toHaveCount(1, { timeout: 20_000 });
+    const { openPositions, pendingOrders } = this.tradePage;
+    await this.waitUntilListed(pendingOrders, openPositions, id, 'pending order');
     await this.expectNoLateDuplicate('pending order', id, ownNew);
     return id;
   }
@@ -366,6 +361,33 @@ export class OrderTracker {
       );
     }
     return mine[0]!;
+  }
+
+  /**
+   * Waits until `table` lists `orderId`. The UI loads a list when its tab is opened, so after the
+   * first look the other tab is opened and then this one again, to make it fetch the list anew.
+   */
+  private async waitUntilListed(
+    table: Table,
+    other: Table,
+    orderId: string,
+    what: string,
+  ): Promise<void> {
+    let attempt = 0;
+    await expect
+      .poll(
+        async () => {
+          if (attempt++ > 0) await other.open();
+          await table.open();
+          return table.row(orderId).count();
+        },
+        {
+          message: `${what} ${orderId} should be listed`,
+          timeout: 20_000,
+          intervals: [1_000, 2_000],
+        },
+      )
+      .toBe(1);
   }
 
   /** A double submit can list its second item only after the first: own it and fail. */
