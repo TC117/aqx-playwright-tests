@@ -496,10 +496,9 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
       const positionRows = await tradePage.history.readPositionRows(POSITION.orderId);
 
       await tradePage.notifications.openTab('order');
-      const items = await tradePage.notifications.items();
 
       const closes = [...CLOSES].reverse();
-      expect(items).toEqual([
+      const expected = [
         ...closes.map((c) => ({
           title: 'Position Closed',
           orderId: POSITION.orderId,
@@ -514,10 +513,13 @@ test.describe('Records of one position lifecycle (mocked reads)', { tag: '@mocke
           text: `BUY ${POSITION.volume} volume(s) at ${POSITION.entry}`,
           time: toServerTime(OPENED, offset),
         },
-      ]);
+      ];
+      // The list can show its first item before the others (seen on CI): read it until complete.
+      await expect.poll(() => tradePage.notifications.items()).toEqual(expected);
 
       // R7: each "Position Closed" carries the close time, price and P/L of a history row.
-      for (const item of items.filter((i) => i.title === 'Position Closed')) {
+      // The listed items equal `expected`, so check those.
+      for (const item of expected.filter((i) => i.title === 'Position Closed')) {
         const row = positionRows.find((r) => r.closeDate === item.time);
         expect(row, `history row closed at ${item.time}`).toBeDefined();
         expect(item.text).toBe(
