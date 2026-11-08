@@ -20,7 +20,12 @@ type Fixtures = {
   tradePage: TradePage;
   /** Orders created by the test; whatever is still open is removed after the test. */
   orders: OrderTracker;
+  /** Automatic: in the `mocked` project, order writes no test route answered are aborted. */
+  mockedWriteGuard: void;
 };
+
+/** Paths of every order write (place, modify, close, delete, bulk). */
+const isOrderWrite = (url: URL): boolean => url.pathname.startsWith('/api/trade/trade/');
 
 /** Playwright `test` with page objects available as fixtures. Import `test` from here in specs. */
 export const test = base.extend<Fixtures>({
@@ -57,6 +62,25 @@ export const test = base.extend<Fixtures>({
     await use(tracker);
     await tracker.cleanUp();
   },
+
+  // Registered before any test route, so a test's own routes take precedence and anything they
+  // pass on with `route.fallback()` ends here. A mocked test can therefore never send an order.
+  mockedWriteGuard: [
+    async ({ page }, use, testInfo) => {
+      if (testInfo.project.name === 'mocked') {
+        await page.route(isOrderWrite, async (route) => {
+          if (route.request().method() === 'GET') return route.fallback();
+          testInfo.annotations.push({
+            type: 'blocked write',
+            description: `${route.request().method()} ${new URL(route.request().url()).pathname}`,
+          });
+          await route.abort('blockedbyclient');
+        });
+      }
+      await use();
+    },
+    { auto: true },
+  ],
 });
 
 export { expect };
