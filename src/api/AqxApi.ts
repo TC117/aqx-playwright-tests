@@ -3,12 +3,13 @@ import fs from 'node:fs';
 import { API_TOKEN_FILE, env } from '../config/env';
 
 /**
- * Read-only client for the web trader's own REST API (the same calls the UI makes).
+ * Client for the web trader's own REST API (the same calls the UI makes).
  *
  * Tests use it to read state the UI shows in several places (market status, symbol spec, account
  * balance, order counts, history), to check that the UI and the server agree, and to decide
  * whether a market-dependent test can run. It never places, modifies or closes orders: those go
- * through the UI, because that is what the tests are about.
+ * through the UI, because that is what the tests are about. Its only write switches One-Click
+ * Trading back off when a failed test left it on.
  *
  * Shapes below were recorded from the live demo; only the fields the tests use are typed.
  */
@@ -222,5 +223,15 @@ export class AqxApi {
       '/api/user/setting/v1/preference?type=OCT_ENABLE&category=ONE_CLICK_TRADING',
     );
     return result.some((p) => String(p.value).toLowerCase() === 'true');
+  }
+
+  /** Switches One-Click Trading off for the account, the same request the settings menu sends. */
+  async switchOneClickTradingOff(): Promise<void> {
+    const response = await this.http.patch('/api/user/setting/v1/preference', {
+      data: { type: 'OCT_ENABLE', category: 'ONE_CLICK_TRADING', value: 'false' },
+    });
+    if (!response.ok()) {
+      throw new Error(`Switching One-Click Trading off responded ${response.status()}`);
+    }
   }
 }

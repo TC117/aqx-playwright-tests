@@ -9,6 +9,7 @@ import {
 import { OrderTracker } from '../helpers/OrderTracker';
 import { LoginPage } from '../pages/LoginPage';
 import { TradePage } from '../pages/TradePage';
+import { TRADE_WRITES } from '../pages/components/tradeRequests';
 
 type Fixtures = {
   loginPage: LoginPage;
@@ -22,10 +23,14 @@ type Fixtures = {
   orders: OrderTracker;
   /** Automatic: in the `mocked` project, order writes no test route answered are aborted. */
   mockedWriteGuard: void;
+  /** Automatic: after each logged-in test, One-Click Trading must be off on the server. */
+  oneClickSafetyNet: void;
 };
 
 /** Paths of every order write (place, modify, close, delete, bulk). */
-const isOrderWrite = (url: URL): boolean => url.pathname.startsWith('/api/trade/trade/');
+const isOrderWrite = (url: URL): boolean => url.pathname.startsWith(TRADE_WRITES);
+
+const LOGGED_IN_PROJECTS = new Set(['terminal', 'mocked', 'trading']);
 
 /** Playwright `test` with page objects available as fixtures. Import `test` from here in specs. */
 export const test = base.extend<Fixtures>({
@@ -78,6 +83,29 @@ export const test = base.extend<Fixtures>({
         });
       }
       await use();
+    },
+    { auto: true },
+  ],
+
+  // The setting is account-wide: left on, every later order skips its confirmation. Declared
+  // before the specs' own fixtures, so it checks after they have torn down. A test that leaves
+  // it on fails, and the setting is switched off for everyone else.
+  oneClickSafetyNet: [
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, use, testInfo) => {
+      await use();
+      if (!hasCredentials || !LOGGED_IN_PROJECTS.has(testInfo.project.name)) return;
+      const api = await AqxApi.create();
+      try {
+        if (await api.isOneClickTradingEnabled()) {
+          await api.switchOneClickTradingOff();
+          throw new Error(
+            'The test left One-Click Trading on for the account; it was switched off',
+          );
+        }
+      } finally {
+        await api.dispose();
+      }
     },
     { auto: true },
   ],
