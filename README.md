@@ -66,7 +66,7 @@ cp .env.example .env.local   # then fill in BASE_URL and the demo account creden
 
 Register a demo account at <https://www.aquariux.com/solutions/trader/>. Settings are read from
 real environment variables first, then `.env.local`, then `.env` (both files are git-ignored).
-Without credentials every logged-in test skips with a clear reason.
+Without credentials every logged-in test skips with a clear reason. Trading tests place real (demo) orders only with `ALLOW_TRADING=true`; otherwise they skip and say so.
 
 ## Running tests
 
@@ -111,7 +111,7 @@ Totals: smoke 1, terminal 45, mocked 44, trading 48.
 - **Own your orders.** The account is shared, so a trading test snapshots the Order No. list,
   treats exactly one new number as its own (`OrderTracker`) and removes only that at the end, one
   item at a time. Bulk-action tests skip unless the account holds nothing but their own orders.
-- **Safety guards.** The `orders` fixture refuses to trade on anything but a demo account. Tests
+- **Safety guards.** Real orders need `ALLOW_TRADING=true`, and the `orders` fixture refuses to trade on anything but a demo account. Tests
   that switch One-Click Trading on switch it off again in teardown, even after a failure.
 - **Values, not visibility.** Tests compare prices, volumes, SL/TP, Order No., states and money
   across the order panel, the tables, notifications, history and the API. Expected numbers come
@@ -133,7 +133,7 @@ Totals: smoke 1, terminal 45, mocked 44, trading 48.
 [`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs type check, lint and format,
 then `smoke`, `terminal` and `mocked` on every push to `main` and every pull request. Credentials
 come from the `TRADER_USERNAME` / `TRADER_PASSWORD` repository secrets; without them the
-logged-in tests skip. The `trading` project runs only on a manual run with "trading" ticked. All
+logged-in tests skip. The `trading` project runs only on a manual run with "trading" ticked, which also sets `ALLOW_TRADING=true`. All
 runs share one concurrency group because they share one demo account. The HTML report is
 uploaded as an artifact.
 

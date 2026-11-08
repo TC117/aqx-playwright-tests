@@ -450,11 +450,12 @@ A case with two run types (for example `Slow + Mocked`) is counted under each of
 > orders, at most 30 per action, chosen by the P/L the browser shows. 7 – Positions History holds
 > balance operations; Orders & Deals holds orders and deals with their state. 8 – the place button
 > is disabled for every order type while closed. 11 – REST with a bearer token, prices over SockJS
-> + STOMP. 12 – the browser checks the SL/TP side but not the stops level, and calculates the
-> floating P/L. 13 – service workers are blocked in the mocked project. 15 – `status` /
-> `marketStatus` in the symbol list and a "Market Closed" button. 16 – EURUSD min 0.01, step 0.01,
-> max 100. 17 – recorded in platform-notes.md. Still open: 5 (partial-close Order No.), 9, 10, 14
-> (they need executions).
+>
+> - STOMP. 12 – the browser checks the SL/TP side but not the stops level, and calculates the
+>   floating P/L. 13 – service workers are blocked in the mocked project. 15 – `status` /
+>   `marketStatus` in the symbol list and a "Market Closed" button. 16 – EURUSD min 0.01, step 0.01,
+>   max 100. 17 – recorded in platform-notes.md. Still open: 5 (partial-close Order No.), 9, 10, 14
+>   (they need executions).
 
 1. Which pending types are offered (Limit, Stop and Stop Limit, or only Stop – public sources
    disagree) and the exact names of the expiry options (expected: Good Till Cancelled, Good Till
